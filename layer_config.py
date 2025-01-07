@@ -28,7 +28,7 @@ class LayerConfig:
         
         self.substrate_var = tk.StringVar(value=self.settings["substrate"])
         ttk.Combobox(
-            self.root, textvariable=self.substrate_var, values=["GaSb", "GaAs"], width=20
+            self.root, textvariable=self.substrate_var, values=["GaSb", "GaAs", "Air"], width=20
         ).grid(row=1, column=0, columnspan=3, pady=5)
 
     def setup_dbr_layers(self):
@@ -114,5 +114,15 @@ class LayerConfig:
 
     def get_layers(self):
         substrate_layer = [[float('nan'), "Constant", "GaSb_ln" if self.substrate_var.get() == "GaSb" else "GaAs_ln"]]
+        substrate_layer = [
+        [
+        float('nan'), 
+        "Constant", 
+        "GaSb_ln" if self.substrate_var.get() == "GaSb" 
+        else "GaAs_ln" if self.substrate_var.get() == "GaAs" 
+        else [1.0, 0.0] if self.substrate_var.get() == "Air" 
+        else float('nan')  # Fallback if none of the conditions match
+        ]
+    ]
         dbr_stack = self.settings["dbr_period"] * self.dbr_layers
         return dbr_stack, self.metal_layers, substrate_layer
