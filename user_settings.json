@@ -1,1 +1,0 @@
-{"dbr_layers": [[201.0, "Constant", [3.816, 0.0]], [239.0, "Constant", [3.101, 0.0]]], "dbr_period": 12, "metal_layers": [[100.0, "Lorentz-Drude", ["Au"]], [100.0, "Lorentz-Drude", ["Pt"]], [100.0, "Lorentz-Drude", ["Ti"]]], "substrate": "GaSb"}

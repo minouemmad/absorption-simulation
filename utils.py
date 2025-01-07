@@ -33,3 +33,4 @@ def save_settings(settings):
     """Save current settings to a JSON file."""
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=4)
+

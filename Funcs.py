@@ -8,6 +8,7 @@ def calc_Nlayer(layers,x,num_lay):
     case = layers[num_lay][1]
     if case == 'Constant':
         v2p=[layers[num_lay][2][0],layers[num_lay][2][1]]
+        #print(v2p)
         nnn=v2p[0]; kap=abs(v2p[1])
         Nlay=(nnn-1j*kap)*ones(x.size)
     elif case == 'Cauchy':

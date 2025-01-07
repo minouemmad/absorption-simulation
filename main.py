@@ -3,6 +3,7 @@ from tkinter import ttk, filedialog, messagebox
 from layer_config import LayerConfig
 from plotting import PlotReflectance
 from utils import load_settings, save_settings, load_raw_data  # Import modified load_raw_data
+import ttkbootstrap as ttkb
 
 class LayerStackApp:
     def __init__(self, root):
@@ -14,18 +15,16 @@ class LayerStackApp:
         
         # File upload button for raw data
         self.raw_data = None
-        upload_btn = tk.Button(self.root, text="Upload Raw Reflectance Data", command=self.upload_raw_data)
-        upload_btn.grid(row=0, column=0, columnspan=3, pady=(10, 10))
-        
+        upload_btn = ttkb.Button(self.root, text="Upload Raw Reflectance Data", command=self.upload_raw_data, bootstyle="primary").grid(row=0, column=3, columnspan=3, pady=10, padx=10, sticky="e")
         # Set up DBR and Metal layers
         self.layer_config = LayerConfig(self.root, self.settings)
         
         # User-defined angle of incidence and polarization
         self.setup_incidence_inputs()
         
+
         # Plot button for simulated data
-        plot_btn = tk.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance)
-        plot_btn.grid(row=16, column=0, columnspan=3)
+        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=17, column=0, columnspan=3, pady=10, padx=10, sticky="ew")
 
     def setup_incidence_inputs(self):
         tk.Label(self.root, text="Incidence Angle (degrees):").grid(row=14, column=0)
@@ -33,10 +32,10 @@ class LayerStackApp:
         self.angle_entry.grid(row=14, column=1, columnspan=2)
         self.angle_entry.insert(0, "0")  # Default is normal incidence
         
-        tk.Label(self.root, text="Polarization:").grid(row=15, column=0)
+        tk.Label(self.root, text="Polarization:").grid(row=16, column=0)
         self.polarization_var = tk.StringVar(value="both")
         ttk.Combobox(self.root, textvariable=self.polarization_var, 
-                     values=["s", "p", "both"]).grid(row=15, column=1, columnspan=2)
+                     values=["s", "p", "both"]).grid(row=16, column=1, columnspan=2)
 
     def upload_raw_data(self):
         # Open file dialog for user to select the raw data file
