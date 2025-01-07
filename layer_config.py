@@ -19,7 +19,6 @@ class LayerConfig:
     def setup_gui(self):
         # Setting up a visually appealing theme
         style = ttk.Style()
-        print(style.theme_names())  # List available themes
         style.theme_use('clam')
 
     def setup_substrate_selection(self):
@@ -59,6 +58,24 @@ class LayerConfig:
 
         tk.Button(self.root, text="Clear DBR Layers", command=self.clear_dbr_layers).grid(row=7, column=0, columnspan=4, pady=5)
 
+    def add_dbr_layer(self):
+        thickness = float(self.dbr_thickness_entry.get())
+        material = self.dbr_material_var.get()
+        layer = [thickness, "Constant", "GaSb_ln" if material == "GaSb" else "AlAsSb_ln"]
+        self.dbr_layers.append(layer)
+        self.dbr_layer_list.insert(tk.END, f"{material} - {thickness} nm")
+        # save_settings(self.settings)
+
+    def set_dbr_period(self):
+        self.settings["dbr_period"] = int(self.dbr_period_entry.get())
+        messagebox.showinfo("DBR Stack", f"DBR Stack set with {self.settings['dbr_period']} periods.")
+        # save_settings(self.settings)
+
+    def clear_dbr_layers(self):
+        self.dbr_layers.clear()
+        self.dbr_layer_list.delete(0, tk.END)
+        # save_settings(self.settings)
+
     def setup_metal_layers(self):
         # Metal layers section
         tk.Label(self.root, text="Define Metal Layers", font=("Arial", 12, "bold"), pady=10).grid(row=8, column=0, columnspan=3, sticky="w")
@@ -79,25 +96,6 @@ class LayerConfig:
         self.metal_layer_list.grid(row=11, column=0, columnspan=4, pady=10)
 
         tk.Button(self.root, text="Clear Metal Layers", command=self.clear_metal_layers).grid(row=12, column=0, columnspan=4, pady=5)
-
-    def add_dbr_layer(self):
-        thickness = float(self.dbr_thickness_entry.get())
-        material = self.dbr_material_var.get()
-        layer = [thickness, "Constant", "GaSb_ln" if material == "GaSb" else "AlAsSb_ln"]
-        self.dbr_layers.append(layer)
-        self.dbr_layer_list.insert(tk.END, f"{material} - {thickness} nm")
-        # save_settings(self.settings)
-
-    def set_dbr_period(self):
-
-        self.settings["dbr_period"] = int(self.dbr_period_entry.get())
-        messagebox.showinfo("DBR Stack", f"DBR Stack set with {self.settings['dbr_period']} periods.")
-        # save_settings(self.settings)
-
-    def clear_dbr_layers(self):
-        self.dbr_layers.clear()
-        self.dbr_layer_list.delete(0, tk.END)
-        # save_settings(self.settings)
 
     def add_metal_layer(self):
         thickness = float(self.metal_thickness_entry.get())

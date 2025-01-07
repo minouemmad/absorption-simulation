@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import Funcs as MF
 from materials import *
 from utils import *
+from scipy.interpolate import make_interp_spline
+
 
 class PlotReflectance:
     def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None):
@@ -12,25 +14,53 @@ class PlotReflectance:
         self.substrate_layer = substrate_layer
 
     def plot_raw_data(self, raw_data):
-        wavelengths = raw_data['wavelength']
-        reflectance = raw_data['reflectance']
+        # Check if raw_data is a DataFrame, if not, try reading from a CSV file
+        if isinstance(raw_data, str):  # Assuming raw_data is a file path
+            raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"])
+        elif not isinstance(raw_data, pd.DataFrame):  # Ensure it's a DataFrame
+            raise TypeError("raw_data should be a pandas DataFrame or a CSV file path.")
         
-        plt.plot(wavelengths, reflectance, label="Raw Data", linestyle='--', color='blue')
-        plt.xlabel("Wavelength (nm)")
-        plt.ylabel("Reflectance")
-        plt.legend()
-        plt.show()  # Show plot immediately after raw data is uploaded
+        # Filter the data to include only wavelengths from 2.5 to 12
+        filtered_data = raw_data[(raw_data['wavelength'] >= 2.5) & (raw_data['wavelength'] <= 12)]
 
-    # def plot_stack(self, angle, polarization):
-    #     # Simulated reflectance data plotting
-    #     wavelengths, simulated_reflectance = self.calculate_reflectance(angle, polarization)
-        
-    #     plt.plot(wavelengths, simulated_reflectance, label="Simulated Reflectance", color='red')
-    #     plt.xlabel("Wavelength (nm)")
-    #     plt.ylabel("Reflectance")
-    #     plt.legend()
-    #     plt.show()
-    
+        # Handle duplicates: Group by wavelength and average reflectance
+        filtered_data = filtered_data.groupby("wavelength", as_index=False).mean()
+
+        # Select desired wavelengths (2.5 to 12 in 0.5 increments)
+        desired_wavelengths = np.arange(2.5, 12, 1)
+        interpolated_points = []
+        for wavelength in desired_wavelengths:
+            # Find the nearest data point for each desired wavelength
+            closest_row = filtered_data.iloc[(filtered_data['wavelength'] - wavelength).abs().argsort()[:1]]
+            interpolated_points.append(closest_row)
+
+        # Combine the nearest points into a DataFrame
+        interpolated_points = pd.concat(interpolated_points)
+
+        # Ensure unique wavelengths for interpolation
+        interpolated_points = interpolated_points.drop_duplicates(subset="wavelength")
+
+        # Smooth curve using interpolation
+        smooth_wavelengths = np.linspace(desired_wavelengths.min(), desired_wavelengths.max(), 500)
+        smooth_reflectance = make_interp_spline(
+            interpolated_points['wavelength'], interpolated_points['reflectance']
+        )(smooth_wavelengths)
+
+        # Plot the points and smooth curve
+        plt.figure(figsize=(8, 6))
+        plt.plot(
+            smooth_wavelengths, smooth_reflectance, label="Smoothed Curve", color="blue"
+        )
+        plt.scatter(
+            interpolated_points['wavelength'], interpolated_points['reflectance'],
+            color="red", label="Data Points", zorder=5
+        )
+        plt.xlabel("Wavelength (µm)")
+        plt.ylabel("Reflectance (%)")
+        plt.legend()
+        plt.grid()
+        plt.title("Reflectance vs. Wavelength")
+        plt.show()
 
     def plot_stack(self, angle, polarization):
         settings = load_settings()
@@ -102,14 +132,28 @@ class PlotReflectance:
         else:
             raise ValueError("Invalid polarization. Choose 's', 'p', or 'both'.")
     
+        # Update x-axis to go from 2.5 to 15, no skipping
+        x_range = np.linspace(2.5, 15, x.size)  # Adjust x-range from 2.5 to 15, with the same number of points as x
+
         # Customize the plot
         ax1.set_xlabel('Wavelength (μm)', size=12)
         ax1.set_ylabel('Reflectance', size=12)
         ax1.set_title('Reflectance of Custom Layer Stack', size=16)
-        ax1.legend()
+
+        # Set x-axis to show values from 2.5 to 15
+        ax1.set_xlim([2, 15])  # Limit x-axis from 2 to 15
+        ax1.set_xticks(np.arange(2, 12, 1))  # Set ticks at every 0.5 units (adjust as needed)
+
+        # Add grid for better visibility
         ax1.grid(alpha=0.2)
-    
+
+        # Add legend
+        ax1.legend()
+
+        # Tight layout to avoid overlapping
         plt.tight_layout()
+
+        # Show the plot
         plt.show()
     
         # Save settings if needed
