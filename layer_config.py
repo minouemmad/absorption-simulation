@@ -90,19 +90,34 @@ class LayerConfig:
         self.metal_thickness_entry = tk.Entry(self.root, width=10)
         self.metal_thickness_entry.grid(row=9, column=3, padx=5, pady=5)
 
-        tk.Button(self.root, text="Add Metal Layer", command=self.add_metal_layer).grid(row=10, column=0, columnspan=4, pady=5)
+        tk.Label(self.root, text="Delta n:").grid(row=10, column=0, padx=5, pady=5)
+        self.delta_n_entry = tk.Entry(self.root, width=10)
+        self.delta_n_entry.insert(0, "0.0")
+        self.delta_n_entry.grid(row=10, column=1, padx=5, pady=5)
+
+        tk.Label(self.root, text="Delta Alpha:").grid(row=10, column=2, padx=5, pady=5)
+        self.delta_alpha_entry = tk.Entry(self.root, width=10)
+        self.delta_alpha_entry.insert(0, "0.0")
+        self.delta_alpha_entry.grid(row=10, column=3, padx=5, pady=5)
+
+        tk.Button(self.root, text="Add Metal Layer", command=self.add_metal_layer).grid(row=12, column=0, columnspan=4, pady=5)
 
         self.metal_layer_list = tk.Listbox(self.root, height=5, width=40)
         self.metal_layer_list.grid(row=11, column=0, columnspan=4, pady=10)
 
-        tk.Button(self.root, text="Clear Metal Layers", command=self.clear_metal_layers).grid(row=12, column=0, columnspan=4, pady=5)
+        tk.Button(self.root, text="Clear Metal Layers", command=self.clear_metal_layers).grid(row=13, column=0, columnspan=4, pady=5)
 
     def add_metal_layer(self):
         thickness = float(self.metal_thickness_entry.get())
         metal = self.metal_material_var.get()
+
+        delta_n = float(self.delta_n_entry.get())
+        delta_alpha = float(self.delta_alpha_entry.get())
+
         layer = [thickness, "Lorentz-Drude", [metal]]
         self.metal_layers.append(layer)
-        self.metal_layer_list.insert(tk.END, f"{metal} - {thickness} nm")
+
+        self.metal_layer_list.insert(tk.END, f"{metal} - {thickness} nm, Δn={delta_n}, Δα={delta_alpha}")
         # save_settings(self.settings)
 
     def clear_metal_layers(self):
