@@ -9,8 +9,7 @@ import ttkbootstrap as ttkb
 class LayerStackApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Layer Stack Configuration")
-        
+
         # Load settings
         self.settings = load_settings()
         
@@ -25,7 +24,7 @@ class LayerStackApp:
         
 
         # Plot button for simulated data
-        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=17, column=0, columnspan=3, pady=10, padx=10, sticky="ew")
+        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=17, column=0, columnspan=10, pady=10, padx=10, sticky="ew")
 
     def setup_incidence_inputs(self):
         tk.Label(self.root, text="Incidence Angle (degrees):").grid(row=14, column=0)
