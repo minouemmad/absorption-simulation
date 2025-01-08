@@ -131,8 +131,8 @@ class PlotReflectance:
         ax1.set_title('Reflectance of Custom Layer Stack', size=16)
 
         # Adjust x-axis range and ticks
-        ax1.set_xlim([2.5, 10])  # Limit x-axis from 2.5 to 10
-        ax1.set_xticks(np.arange(3, 11, 1))  # Set ticks at every 1 unit, starting at 3
+        ax1.set_xlim([2.5, 15])  # Limit x-axis from 2.5 to 15
+        ax1.set_xticks(np.arange(3, 15, 1))  # Set ticks at every 1 unit, starting at 3
 
         # Add grid
         ax1.grid(alpha=0.2)
