@@ -12,6 +12,9 @@ def calc_Nlayer(layers,x,num_lay):
     while len(params) < 3:
         params.append(0)
 
+    material, delta_n, delta_alpha = params
+
+
     if case == 'Constant':
         v2p=[layers[num_lay][2][0],layers[num_lay][2][1]]
         #print(v2p)
@@ -59,7 +62,6 @@ def calc_Nlayer(layers,x,num_lay):
 
     elif case == 'Lorentz-Drude':
         material, delta_n, delta_alpha = params
-        print(params) #delta parameters are not getting updated
 
         v2p=[layers[num_lay][2][0]]  
         Metal = LD.LD(x*1e-9, material = v2p[0],model = 'LD') # Metal with dielectric function of LD model
@@ -67,9 +69,9 @@ def calc_Nlayer(layers,x,num_lay):
         # Adjust with delta parameters
         nnn = Metal.n + delta_n
         kap = Metal.k + delta_alpha
-        v2p=[layers[num_lay][2][0]]  
-        Metal = LD.LD(x*1e-9, material = v2p[0],model = 'LD') # Metal with dielectric function of LD model
+        print(f"Updated n: {nnn}, Updated k: {kap}")
 
+        # Calculate the complex refractive index
         Nlay = nnn - 1j*kap
         
     elif case == 'Drude':

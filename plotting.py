@@ -14,45 +14,46 @@ class PlotReflectance:
         self.substrate_layer = substrate_layer
 
     def plot_raw_data(self, raw_data):
-        # Check if raw_data is a DataFrame, if not, try reading from a CSV file
+        # Check if raw_data is a file path or DataFrame
         if isinstance(raw_data, str):  # Assuming raw_data is a file path
-            raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"])
-        elif not isinstance(raw_data, pd.DataFrame):  # Ensure it's a DataFrame
+            try:
+                raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"], 
+                                       delimiter=",", engine="python")
+            except Exception as e:
+                raise ValueError(f"Failed to load file: {e}")
+        elif not isinstance(raw_data, pd.DataFrame):
             raise TypeError("raw_data should be a pandas DataFrame or a CSV file path.")
         
-        # Filter the data to include only wavelengths from 2.5 to 12
-        filtered_data = raw_data[(raw_data['wavelength'] >= 2.5) & (raw_data['wavelength'] <= 12)]
+        # Convert wavelength from nm to µm if needed
+        if raw_data['wavelength'].max() > 100:  # Assuming large values mean nm
+            raw_data['wavelength'] = raw_data['wavelength'] / 1000.0  # Convert to µm
+
+        # Filter the data to include only the range of interest (e.g., 2.5 to 12 µm)
+        min_wavelength = max(2.5, raw_data['wavelength'].min())
+        max_wavelength = min(12, raw_data['wavelength'].max())
+        filtered_data = raw_data[(raw_data['wavelength'] >= min_wavelength) & 
+                                 (raw_data['wavelength'] <= max_wavelength)]
+        
+        if filtered_data.empty:
+            raise ValueError("No data points found in the specified wavelength range (2.5–12 µm).")
 
         # Handle duplicates: Group by wavelength and average reflectance
         filtered_data = filtered_data.groupby("wavelength", as_index=False).mean()
 
-        # Select desired wavelengths (2.5 to 12 in 0.5 increments)
-        desired_wavelengths = np.arange(2.5, 12, 1)
-        interpolated_points = []
-        for wavelength in desired_wavelengths:
-            # Find the nearest data point for each desired wavelength
-            closest_row = filtered_data.iloc[(filtered_data['wavelength'] - wavelength).abs().argsort()[:1]]
-            interpolated_points.append(closest_row)
-
-        # Combine the nearest points into a DataFrame
-        interpolated_points = pd.concat(interpolated_points)
-
-        # Ensure unique wavelengths for interpolation
-        interpolated_points = interpolated_points.drop_duplicates(subset="wavelength")
-
-        # Smooth curve using interpolation
-        smooth_wavelengths = np.linspace(desired_wavelengths.min(), desired_wavelengths.max(), 500)
+        # Smooth curve using dense interpolation
+        smooth_wavelengths = np.linspace(filtered_data['wavelength'].min(),
+                                          filtered_data['wavelength'].max(), 500)
         smooth_reflectance = make_interp_spline(
-            interpolated_points['wavelength'], interpolated_points['reflectance']
+            filtered_data['wavelength'], filtered_data['reflectance'], k=3  # Cubic spline
         )(smooth_wavelengths)
 
-        # Plot the points and smooth curve
+        # Plot the data points and smooth curve
         plt.figure(figsize=(8, 6))
         plt.plot(
-            smooth_wavelengths, smooth_reflectance, label="Smoothed Curve", color="blue"
+            smooth_wavelengths, smooth_reflectance, label="Smoothed Curve", color="blue", linewidth=2
         )
         plt.scatter(
-            interpolated_points['wavelength'], interpolated_points['reflectance'],
+            filtered_data['wavelength'], filtered_data['reflectance'],
             color="red", label="Data Points", zorder=5
         )
         plt.xlabel("Wavelength (µm)")
@@ -64,11 +65,14 @@ class PlotReflectance:
 
     def plot_stack(self, angle, polarization):
         settings = load_settings()
-        dbr_material = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
+        dbr_stack = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
+        #substrate_material = self.substrate_var.get()
+
+
         nlamb = 3500
-        x = np.linspace(2.5, 10, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
+        x = np.linspace(2.5, 15, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
 
         # Fix substrate material by replacing it with its corresponding refractive index function
         if isinstance(substrate_material, list) and len(substrate_material) > 0:
@@ -80,7 +84,7 @@ class PlotReflectance:
                 substrate_material[0][2] = [1.0, 0.0]
 
         # Replace materials in DBR stack with their corresponding refractive index functions
-        for layer in dbr_material:
+        for layer in dbr_stack:
             if layer[2] == "GaSb_ln":
                 layer[2] = GaSb_ln(x)
             elif layer[2] == "AlAsSb_ln":
@@ -92,15 +96,16 @@ class PlotReflectance:
         Ls_structure = (
             [[np.nan, "Constant", [1.0, 0.0]]] +  # Initial spacer layer
             metal_layers +                        # Metal layers
-            [[239.0, "Constant", AlAsSb_ln(x)]] +  # Example additional layer
-            dbr_material +                        # DBR stack layers
+            [[239., "Constant", AlAsSb_ln(x)]] +  # Example additional layer
+            dbr_stack +                           # DBR stack layers
             substrate_material                    # Substrate layer
         )
+
         Ls_structure = Ls_structure[::-1]  # Reverse the structure as required
 
         # Print results for debugging
         print("Extracted substrate material: " + str(substrate_material))
-        print("Extracted DBR materials: " + str(dbr_material))
+        print("Extracted DBR materials: " + str(dbr_stack))
         print("Final structure: " + str(Ls_structure))
 
         # Calculate reflectance and transmittance
@@ -109,7 +114,7 @@ class PlotReflectance:
         rs, rp, Ts, Tp = MF.calc_rsrpTsTp(incang, Ls_structure, x)
     
         # Initialize figure and axis
-        fig, ax1 = plt.subplots(figsize=(8, 5))
+        fig, ax1 = plt.subplots(figsize=(10, 5))
     
         # Handle user-specified polarization
         if polarization == "s":
