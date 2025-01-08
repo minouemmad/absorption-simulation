@@ -68,7 +68,7 @@ class PlotReflectance:
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
         nlamb = 3500
-        x = np.linspace(2.5, 15, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
+        x = np.linspace(2.5, 10, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
 
         # Fix substrate material by replacing it with its corresponding refractive index function
         if isinstance(substrate_material, list) and len(substrate_material) > 0:
@@ -109,7 +109,7 @@ class PlotReflectance:
         rs, rp, Ts, Tp = MF.calc_rsrpTsTp(incang, Ls_structure, x)
     
         # Initialize figure and axis
-        fig, ax1 = plt.subplots(figsize=(10, 5))
+        fig, ax1 = plt.subplots(figsize=(8, 5))
     
         # Handle user-specified polarization
         if polarization == "s":
@@ -132,25 +132,22 @@ class PlotReflectance:
         else:
             raise ValueError("Invalid polarization. Choose 's', 'p', or 'both'.")
     
-        # Update x-axis to go from 2.5 to 15, no skipping
-        x_range = np.linspace(2.5, 15, x.size)  # Adjust x-range from 2.5 to 15, with the same number of points as x
-
-        # Customize the plot
+        # Customize plot
         ax1.set_xlabel('Wavelength (μm)', size=12)
         ax1.set_ylabel('Reflectance', size=12)
         ax1.set_title('Reflectance of Custom Layer Stack', size=16)
 
-        # Set x-axis to show values from 2.5 to 15
-        ax1.set_xlim([2, 15])  # Limit x-axis from 2 to 15
-        ax1.set_xticks(np.arange(2, 12, 1))  # Set ticks at every 0.5 units (adjust as needed)
+        # Adjust x-axis range and ticks
+        ax1.set_xlim([2.5, 10])  # Limit x-axis from 2.5 to 10
+        ax1.set_xticks(np.arange(3, 11, 1))  # Set ticks at every 1 unit, starting at 3
 
-        # Add grid for better visibility
+        # Add grid
         ax1.grid(alpha=0.2)
 
         # Add legend
         ax1.legend()
 
-        # Tight layout to avoid overlapping
+        # Tight layout
         plt.tight_layout()
 
         # Show the plot
