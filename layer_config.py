@@ -80,18 +80,42 @@ class LayerConfig:
         layer = [thickness, "Constant", "GaSb_ln" if material == "GaSb" else "AlAsSb_ln"]
         self.dbr_layers.append(layer)
         self.dbr_layer_list.insert(tk.END, f"{material} - {thickness} nm")
-        save_settings(self.settings)
+        #save_settings(self.settings)
 
     def set_dbr_period(self):
         self.settings["dbr_period"] = int(self.dbr_period_entry.get())
-        dbr_stack = int(self.dbr_period_entry.get()) * self.dbr_layers
-        messagebox.showinfo("DBR Stack", f"DBR Stack set with {len(dbr_stack)} layers.")
-        #save_settings(self.settings)
+        dbr_period = int(self.dbr_period_entry.get())
+        dbr_stack = []
+    
+        for _ in range(dbr_period):
+            for layer in self.dbr_layers:
+                print(layer[2])
+                if layer[2] == "GaSb_ln":
+                    dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
+                elif layer[2] == "AlAsSb_ln":
+                    dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
+                else:
+                    dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
+    
+        self.dbr_stack = dbr_stack
+
+        # Create or update a label for displaying the message
+        if hasattr(self, "dbr_message_label"):
+            # Update the text of the existing label
+            self.dbr_message_label.config(text=f"DBR Stack set with {len(dbr_stack)} layers.", fg="red")
+        else:
+            # Create the label if it doesn't already exist
+            self.dbr_message_label = tk.Label(self.root, 
+                                          text=f"DBR Stack set with {len(dbr_stack)} layers.", 
+                                          font=("Arial", 10, "italic"), 
+                                          fg="#FF6347")
+            # Position the label to the right of the Set Period button
+            self.dbr_message_label.grid(row=5, column=4, padx=0, sticky="w")
 
     def clear_dbr_layers(self):
         self.dbr_layers.clear()
         self.dbr_layer_list.delete(0, tk.END)
-        save_settings(self.settings)
+        #save_settings(self.settings)
 
     def setup_metal_layers(self):
         # Metal layers section
@@ -140,7 +164,7 @@ class LayerConfig:
         self.metal_layers.append(layer)
 
         self.metal_layer_list.insert(tk.END, f"{metal} - {thickness} nm, Δn={delta_n}, Δα={delta_alpha}")
-        save_settings(self.settings)
+        #save_settings(self.settings)
 
     def edit_metal_layer(self):
         selected_index = self.metal_layer_list.curselection()
@@ -180,16 +204,29 @@ class LayerConfig:
         # save_settings(self.settings)
 
     def get_layers(self):
-        substrate_layer = [[float('nan'), "Constant", "GaSb_ln" if self.substrate_var.get() == "GaSb" else "GaAs_ln"]]
+        # Generate the substrate layer dynamically
         substrate_layer = [
-        [
-        float('nan'), 
-        "Constant", 
-        "GaSb_ln" if self.substrate_var.get() == "GaSb" 
-        else "GaAs_ln" if self.substrate_var.get() == "GaAs" 
-        else [1.0, 0.0] if self.substrate_var.get() == "Air" 
-        else float('nan')  # Fallback if none of the conditions match
+            [
+                float('nan'),
+                "Constant",
+                "GaSb_ln" if self.substrate_var.get() == "GaSb" 
+                else "GaAs_ln" if self.substrate_var.get() == "GaAs" 
+                else [1.0, 0.0] if self.substrate_var.get() == "Air" 
+                else float('nan')  # Fallback if none of the conditions match
+            ]
         ]
-    ]
-        dbr_stack = self.settings["dbr_period"] * self.dbr_layers
+
+        # Dynamically generate the dbr_stack
+        dbr_period = self.settings["dbr_period"]
+        dbr_stack = []
+
+        for _ in range(dbr_period):
+            for layer in self.dbr_layers:
+                if layer[2] == "GaSb_ln":
+                    dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
+                elif layer[2] == "AlAsSb_ln":
+                    dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
+                else:
+                    dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
+        print(f"DBR Stack: {dbr_stack}")
         return dbr_stack, self.metal_layers, substrate_layer

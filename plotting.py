@@ -2,13 +2,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import Funcs as MF
-from materials import *
 from utils import *
 from scipy.interpolate import make_interp_spline
 
 
 class PlotReflectance:
-    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None):
+    def __init__(self, dbr_stack, metal_layers, substrate_layer):
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
         self.substrate_layer = substrate_layer
@@ -68,8 +67,6 @@ class PlotReflectance:
         dbr_stack = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
-        #substrate_material = self.substrate_var.get()
-
 
         nlamb = 3500
         x = np.linspace(2.5, 15, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
@@ -77,26 +74,17 @@ class PlotReflectance:
         # Fix substrate material by replacing it with its corresponding refractive index function
         if isinstance(substrate_material, list) and len(substrate_material) > 0:
             if substrate_material[0][2] == "GaSb_ln":
-                substrate_material[0][2] = GaSb_ln(x)
+                substrate_material[0][2] = [3.816, 0.0]
             elif substrate_material[0][2] == "GaAs_ln":
-                substrate_material[0][2] = GaAs_ln(x)
+                substrate_material[0][2] = [1, 0] # unknown for now
             else:
                 substrate_material[0][2] = [1.0, 0.0]
-
-        # Replace materials in DBR stack with their corresponding refractive index functions
-        for layer in dbr_stack:
-            if layer[2] == "GaSb_ln":
-                layer[2] = GaSb_ln(x)
-            elif layer[2] == "AlAsSb_ln":
-                layer[2] = AlAsSb_ln(x)
-            else:
-                layer[2] = [1.0, 0.0]
 
         # Combine all layers into the final structure
         Ls_structure = (
             [[np.nan, "Constant", [1.0, 0.0]]] +  # Initial spacer layer
             metal_layers +                        # Metal layers
-            [[239., "Constant", AlAsSb_ln(x)]] +  # Example additional layer
+            [[239., "Constant", [3.101, 0.0]]] +  # Example additional layer
             dbr_stack +                           # DBR stack layers
             substrate_material                    # Substrate layer
         )
