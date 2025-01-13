@@ -62,24 +62,24 @@ class PlotReflectance:
         plt.title("Reflectance vs. Wavelength")
         plt.show()
 
-    def plot_stack(self, angle, polarization):
+    def plot_stack(self, angle, polarization, include_absorption=True):
         settings = load_settings()
         dbr_stack = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
-
+    
         nlamb = 3500
         x = np.linspace(2.5, 15, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
-
+    
         # Fix substrate material by replacing it with its corresponding refractive index function
         if isinstance(substrate_material, list) and len(substrate_material) > 0:
             if substrate_material[0][2] == "GaSb_ln":
                 substrate_material[0][2] = [3.816, 0.0]
             elif substrate_material[0][2] == "GaAs_ln":
-                substrate_material[0][2] = [1, 0] # unknown for now
+                substrate_material[0][2] = [1, 0]  # unknown for now
             else:
                 substrate_material[0][2] = [1.0, 0.0]
-
+    
         # Combine all layers into the final structure
         Ls_structure = (
             [[np.nan, "Constant", [1.0, 0.0]]] +  # Initial spacer layer
@@ -88,17 +88,17 @@ class PlotReflectance:
             dbr_stack +                           # DBR stack layers
             substrate_material                    # Substrate layer
         )
-
+    
         Ls_structure = Ls_structure[::-1]  # Reverse the structure as required
-
+    
         # Print results for debugging
         print("Extracted substrate material: " + str(substrate_material))
         print("Extracted DBR materials: " + str(dbr_stack))
         print("Final structure: " + str(Ls_structure))
-
+    
         # Calculate reflectance and transmittance
         incang = angle * np.pi / 180 * np.ones(x.size)  # Incident angle
-
+    
         rs, rp, Ts, Tp = MF.calc_rsrpTsTp(incang, Ls_structure, x)
     
         # Initialize figure and axis
@@ -108,48 +108,56 @@ class PlotReflectance:
         if polarization == "s":
             R0 = (abs(rs))**2
             T0 = np.real(Ts)
-            Abs1 = 1.0 - R0 - T0
+            Abs1 = 1.0 - R0 - T0 if include_absorption else None
             ax1.plot(x / 1000, R0, label='Reflectance (s-pol)', color='blue')
         elif polarization == "p":
             R0 = (abs(rp))**2
             T0 = np.real(Tp)
-            Abs1 = 1.0 - R0 - T0
+            Abs1 = 1.0 - R0 - T0 if include_absorption else None
             ax1.plot(x / 1000, R0, label='Reflectance (p-pol)', color='red')
         elif polarization == "both":
             R0_s = (abs(rs))**2
             R0_p = (abs(rp))**2
             R0_avg = 0.5 * (R0_s + R0_p)  # Average reflectance for unpolarized light
+            Abs1 = 1 - R0_avg - (0.5 * (Ts + Tp)) if include_absorption else None
             ax1.plot(x / 1000, R0_s, label='Reflectance (s-pol)', color='blue', linestyle='--')
             ax1.plot(x / 1000, R0_p, label='Reflectance (p-pol)', color='red', linestyle='--')
             ax1.plot(x / 1000, R0_avg, label='Reflectance (avg)', color='green')
         else:
             raise ValueError("Invalid polarization. Choose 's', 'p', or 'both'.")
     
+        # Create a second y-axis for absorption if included
+        if include_absorption and Abs1 is not None:
+            ax2 = ax1.twinx()
+            ax2.plot(x / 1000, Abs1, label='Absorption', color='purple')
+            ax2.set_ylabel('Absorption', size=12)
+            ax2.set_ylim([0, 1])  # Set the y-axis range for absorption from 0 to 1
+            ax2.legend(loc='upper right')
+    
         # Customize plot
         ax1.set_xlabel('Wavelength (μm)', size=12)
         ax1.set_ylabel('Reflectance', size=12)
-        ax1.set_title('Reflectance of Custom Layer Stack', size=16)
-
+        ax1.set_title('Reflectance and Absorption of Custom Layer Stack', size=16)
+    
         # Adjust x-axis range and ticks
         ax1.set_xlim([2.5, 15])  # Limit x-axis from 2.5 to 15
         ax1.set_xticks(np.arange(3, 15, 1))  # Set ticks at every 1 unit, starting at 3
-
+    
         # Adjust y-axis range to [0, 1]
         ax1.set_ylim([0, 1])  # Set the y-axis range from 0 to 1
-
+    
         # Add grid
         ax1.grid(alpha=0.2)
-
-        # Add legend
-        ax1.legend()
-
+    
+        # Add legends
+        ax1.legend(loc='upper left')
+    
         # Tight layout
         plt.tight_layout()
-
+    
         # Show the plot
         plt.show()
     
         # Save settings if needed
         save_settings(settings)
-
     
