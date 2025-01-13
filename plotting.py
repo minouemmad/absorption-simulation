@@ -134,6 +134,9 @@ class PlotReflectance:
         ax1.set_xlim([2.5, 15])  # Limit x-axis from 2.5 to 15
         ax1.set_xticks(np.arange(3, 15, 1))  # Set ticks at every 1 unit, starting at 3
 
+        # Adjust y-axis range to [0, 1]
+        ax1.set_ylim([0, 1])  # Set the y-axis range from 0 to 1
+
         # Add grid
         ax1.grid(alpha=0.2)
 
