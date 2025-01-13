@@ -1,4 +1,4 @@
-# OptiFit [![Cult Of Martians][cult-img]][cult] 
+# OptiFit
 
 Simulate reflectance and absorption from given inputs and fit the graph to your experimental plot.
 
