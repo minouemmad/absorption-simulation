@@ -24,18 +24,18 @@ class LayerStackApp:
         
 
         # Plot button for simulated data
-        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=17, column=0, columnspan=10, pady=10, padx=10, sticky="ew")
+        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=20, column=0, columnspan=10, pady=10, padx=10, sticky="ew")
 
     def setup_incidence_inputs(self):
-        tk.Label(self.root, text="Incidence Angle (degrees):").grid(row=14, column=0)
+        tk.Label(self.root, text="Incidence Angle (degrees):").grid(row=18, column=0)
         self.angle_entry = tk.Entry(self.root)
-        self.angle_entry.grid(row=14, column=1, columnspan=2)
+        self.angle_entry.grid(row=18, column=1, columnspan=2)
         self.angle_entry.insert(0, "0")  # Default is normal incidence
         
-        tk.Label(self.root, text="Polarization:").grid(row=16, column=0)
+        tk.Label(self.root, text="Polarization:").grid(row=19, column=0)
         self.polarization_var = tk.StringVar(value="both")
         ttk.Combobox(self.root, textvariable=self.polarization_var, 
-                     values=["s", "p", "both"]).grid(row=16, column=1, columnspan=2)
+                     values=["s", "p", "both"]).grid(row=19, column=1, columnspan=2)
 
     def upload_raw_data(self):
         # Open file dialog for user to select the raw data file
@@ -58,7 +58,6 @@ class LayerStackApp:
         angle = float(self.angle_entry.get())
         polarization = self.polarization_var.get()
         dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
-        print(dbr_stack)
         plot = PlotReflectance(dbr_stack, metal_layers, substrate_layer)
         
         # Plot simulated reflectance overlay

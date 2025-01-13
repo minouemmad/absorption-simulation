@@ -10,7 +10,7 @@ class LayerConfig:
     def __init__(self, root, settings):
         self.root = root
         self.root.title("Layer Configuration")
-        self.root.geometry("600x800")
+        self.root.geometry("700x820")
         self.root.resizable(True, True)
         self.settings = settings
         self.dbr_layers = settings["dbr_layers"]
@@ -143,14 +143,34 @@ class LayerConfig:
         self.delta_alpha_entry.insert(0, "0.0")
         self.delta_alpha_entry.grid(row=10, column=3, padx=5, pady=5)
 
-        tk.Button(self.root, text="Add Metal Layer", command=self.add_metal_layer).grid(row=12, column=0, columnspan=4, pady=5)
+        tk.Label(self.root, text="Delta ωp (Plasma Frequency):").grid(row=11, column=0, padx=5, pady=5)
+        self.delta_omega_p_entry = tk.Entry(self.root, width=10)
+        self.delta_omega_p_entry.insert(0, "0.0")
+        self.delta_omega_p_entry.grid(row=11, column=1, padx=5, pady=5)
+
+        tk.Label(self.root, text="Delta f (Oscillator Strength):").grid(row=11, column=2, padx=5, pady=5)
+        self.delta_f_entry = tk.Entry(self.root, width=10)
+        self.delta_f_entry.insert(0, "0.0")
+        self.delta_f_entry.grid(row=11, column=3, padx=5, pady=5)
+
+        tk.Label(self.root, text="Delta Γ (Damping Frequency):").grid(row=12, column=0, padx=5, pady=5)
+        self.delta_gamma_entry = tk.Entry(self.root, width=10)
+        self.delta_gamma_entry.insert(0, "0.0")
+        self.delta_gamma_entry.grid(row=12, column=1, padx=5, pady=5)
+
+        tk.Label(self.root, text="Delta ω (Resonant Frequency):").grid(row=12, column=2, padx=5, pady=5)
+        self.delta_omega_entry = tk.Entry(self.root, width=10)
+        self.delta_omega_entry.insert(0, "0.0")
+        self.delta_omega_entry.grid(row=12, column=3, padx=5, pady=5)
+
+        tk.Button(self.root, text="Add Metal Layer", command=self.add_metal_layer).grid(row=13, column=0, columnspan=4, pady=5)
 
         self.metal_layer_list = tk.Listbox(self.root, height=5, width=60)
-        self.metal_layer_list.grid(row=11, column=0, columnspan=4, pady=10)
+        self.metal_layer_list.grid(row=14, column=0, columnspan=4, pady=10)
 
-        tk.Button(self.root, text="Edit Selected Layer", command=self.edit_metal_layer).grid(row=13, column=0, columnspan=2, pady=5)
-        tk.Button(self.root, text="Clear Metal Layers", command=self.clear_metal_layers).grid(row=13, column=0, columnspan=4, pady=5)
-        tk.Button(self.root, text="Delete Selected Layer", command=self.delete_metal_layer).grid(row=13, column=2, columnspan=2, pady=5)
+        tk.Button(self.root, text="Edit Selected Layer", command=self.edit_metal_layer).grid(row=16, column=1, columnspan=2, pady=5)
+        tk.Button(self.root, text="Clear Metal Layers", command=self.clear_metal_layers).grid(row=16, column=0, columnspan=2, pady=5)
+        tk.Button(self.root, text="Delete Selected Layer", command=self.delete_metal_layer).grid(row=16, column=2, columnspan=4, pady=5)
 
     def add_metal_layer(self):
         thickness = float(self.metal_thickness_entry.get())
@@ -158,12 +178,23 @@ class LayerConfig:
         delta_n = float(self.delta_n_entry.get())
         delta_alpha = float(self.delta_alpha_entry.get())
 
+        delta_omega_p = float(self.delta_omega_p_entry.get())
+        delta_f = float(self.delta_f_entry.get())
+        delta_gamma = float(self.delta_gamma_entry.get())
+        delta_omega = float(self.delta_omega_entry.get())
+
         #layer = [thickness, "Lorentz-Drude", [metal]]
-        layer = [thickness, "Lorentz-Drude", [metal, delta_n, delta_alpha]]
+        layer = [thickness, "Lorentz-Drude", [metal, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega]]
 
         self.metal_layers.append(layer)
 
-        self.metal_layer_list.insert(tk.END, f"{metal} - {thickness} nm, Δn={delta_n}, Δα={delta_alpha}")
+        self.metal_layer_list.insert(tk.END, (
+            f"{metal} - {thickness} nm, "
+            f"Δn={delta_n}, Δα={delta_alpha}, "
+            f"Δωp={delta_omega_p}, Δf={delta_f}, "
+            f"ΔΓ={delta_gamma}, Δω={delta_omega}"
+        ))
+
         #save_settings(self.settings)
 
     def edit_metal_layer(self):
@@ -181,10 +212,19 @@ class LayerConfig:
             layer[2][0] = self.metal_material_var.get()
             layer[2][1] = float(self.delta_n_entry.get())
             layer[2][2] = float(self.delta_alpha_entry.get())
+            layer[2][3] = float(self.delta_omega_p_entry.get())
+            layer[2][4] = float(self.delta_f_entry.get())
+            layer[2][5] = float(self.delta_gamma_entry.get())
+            layer[2][6] = float(self.delta_omega_entry.get())
 
             # Update the list display
             self.metal_layer_list.delete(index)
-            self.metal_layer_list.insert(index, f"{layer[2][0]} - {layer[0]} nm, Δn={layer[2][1]}, Δα={layer[2][2]}")
+            self.metal_layer_list.insert(tk.END, (
+            f"{layer[2][0]} - {layer[0]} nm, "
+            f"Δn={layer[2][1]}, Δα={layer[2][2]}, "
+            f"Δωp={layer[2][3]}, Δf={layer[2][4]}, "
+            f"ΔΓ={layer[2][5]}, Δω={layer[2][6]}"
+        ))
         except ValueError:
             messagebox.showerror("Invalid Input", "Please enter valid values for all parameters.")
 
