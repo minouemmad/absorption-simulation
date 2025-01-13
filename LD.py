@@ -47,12 +47,15 @@ import numpy as np
 
 
 class LD():
-    def __init__(self, lamda, material, model='LD'):
-
-
+    def __init__(self, lamda, material, delta_omega_p, delta_f, delta_gamma, delta_omega, model='LD'):
         self.lamda = lamda
         self.material = material
         self.model = model
+
+        self.delta_omega_p = delta_omega_p
+        self.delta_f = delta_f
+        self.delta_gamma = delta_gamma
+        self.delta_omega = delta_omega
 
         # ***********************************************************************
         # Physical constants
@@ -123,11 +126,17 @@ class LD():
             Gamma = [0.080, 0.517, 1.838, 3.668, 8.517]
             omega = [0.000, 0.780, 1.314, 3.141, 9.249]
         else:
-            print('Not a Valid Material')
+            raise ValueError(f"Invalid material '{self.material}' provided. Please use a valid material.")
 
-        order = len(omega)
+        # Ensure omega is properly scaled
         Gamma = [_ * ehbar for _ in Gamma]
         omega = [_ * ehbar for _ in omega]
+        order = len(omega)
+
+        omega_p += delta_omega_p * ehbar
+        f = [fi + delta_f for fi in f]
+        Gamma = [gamma + delta_gamma for gamma in Gamma]
+        omega = [omega_i + delta_omega for omega_i in omega]
 
         if self.model == 'D':
 

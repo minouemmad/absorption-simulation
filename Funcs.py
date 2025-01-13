@@ -8,11 +8,10 @@ def calc_Nlayer(layers,x,num_lay):
     case = layers[num_lay][1]
     params = layers[num_lay][2]
 
-    # Ensure params has at least 3 elements by adding two zeros if necessary
-    while len(params) < 3:
+    while len(params)<7:
         params.append(0)
 
-    material, delta_n, delta_alpha = params
+    materials, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega =  params
 
 
     if case == 'Constant':
@@ -61,18 +60,17 @@ def calc_Nlayer(layers,x,num_lay):
         Nlay = nnn - 1j*kap
 
     elif case == 'Lorentz-Drude':
-        material, delta_n, delta_alpha = params
-
-        v2p=[layers[num_lay][2][0]]  
-        Metal = LD.LD(x*1e-9, material = v2p[0],model = 'LD') # Metal with dielectric function of LD model
-        
-        # Adjust with delta parameters
-        nnn = Metal.n + delta_n
-        kap = Metal.k + delta_alpha
+        v2p=[layers[num_lay][2][0]]
+        v2p, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega =  params
+          
+        Metal = LD.LD(x * 1e-9, v2p, delta_omega_p, delta_f, delta_gamma, delta_omega, model='LD')
+        # v2p[0] refers to the material being used, e.g., 'Ag' or 'Al'
+    
+        # Adjust RI delta parameters
+        nnn = Metal.n + delta_n # real part of the complex refractive index for the material n represents the refractive index 
+        kap = Metal.k + delta_alpha # imaginary part of the complex refractive index for the material k represents the extinction coefficient (which is related to the absorption)
         print(f"Updated n: {nnn}, Updated k: {kap}")
-
-        # Calculate the complex refractive index
-        Nlay = nnn - 1j*kap
+        Nlay = nnn - 1j*kap # this creates the complex refractive index for the layer using n and k values, combining them into a single complex number (Nlay)
         
     elif case == 'Drude':
         v2p=[layers[num_lay][2][0],layers[num_lay][2][1],layers[num_lay][2][2]]   # f_o, w_o, G       
