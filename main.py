@@ -24,7 +24,7 @@ class LayerStackApp:
         
 
         # Plot button for simulated data
-        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=20, column=0, columnspan=10, pady=10, padx=10, sticky="ew")
+        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=1, column=3, columnspan=3, pady=10, padx=10, sticky="ew")
 
     def setup_incidence_inputs(self):
         tk.Label(self.root, text="Incidence Angle (degrees):").grid(row=18, column=0)

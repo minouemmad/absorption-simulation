@@ -22,6 +22,7 @@ class LayerConfig:
         self.setup_metal_layers()
 
     def setup_gui(self):
+        
         # Setting up a visually appealing theme
         style = ttk.Style()
         # Initialize the ttkbootstrap style
@@ -30,6 +31,29 @@ class LayerConfig:
         # Main Frame
         self.main_frame = ttk.Frame(self.root, padding="10")
         self.main_frame.grid(sticky=("N", "S", "E", "W"))
+
+        # # Create a canvas to allow scrolling
+        # self.canvas = tk.Canvas(self.root, width=700, height=820)
+        # self.canvas.grid(row=0, column=0, sticky="nsew")
+
+        # # Add scrollbars
+        # self.v_scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
+        # self.v_scrollbar.grid(row=0, column=1, sticky="ns")
+        # self.h_scrollbar = ttk.Scrollbar(self.root, orient="horizontal", command=self.canvas.xview)
+        # self.h_scrollbar.grid(row=1, column=0, sticky="ew")
+
+        # # Configure canvas scrolling
+        # self.canvas.configure(yscrollcommand=self.v_scrollbar.set, xscrollcommand=self.h_scrollbar.set)
+
+        # # Create a frame inside the canvas
+        # self.scrollable_frame = ttk.Frame(self.canvas)
+        # self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+
+        # # Add the frame to the canvas
+        # self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        # # Populate the scrollable frame with GUI elements
+        # self.setup_substrate_selection()
 
     def setup_substrate_selection(self):
         # Substrate selection section
@@ -129,49 +153,11 @@ class LayerConfig:
         self.mystery_metal_checkbox = tk.Checkbutton(self.root, variable=self.mystery_metal_var, command=self.toggle_mystery_metal)
         self.mystery_metal_checkbox.grid(row=9, column=1, padx=5, pady=5, sticky="w")
 
-        tk.Label(self.root, text="Material:").grid(row=10, column=0, padx=5, pady=5)
-        self.metal_material_var = tk.StringVar(value="Au")
-        ttk.Combobox(
-            self.root, textvariable=self.metal_material_var, values=["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"], width=10
-        ).grid(row=10, column=1, padx=5, pady=5)
-
-        tk.Label(self.root, text="Thickness (nm):").grid(row=9, column=2, padx=5, pady=5)
-        self.metal_thickness_entry = tk.Entry(self.root, width=10)
-        self.metal_thickness_entry.grid(row=9, column=3, padx=5, pady=5)
-
-        tk.Label(self.root, text="Delta n:").grid(row=11, column=0, padx=5, pady=5)
-        self.delta_n_entry = tk.Entry(self.root, width=10)
-        self.delta_n_entry.insert(0, "0.0")
-        self.delta_n_entry.grid(row=11, column=1, padx=5, pady=5)
-
-        tk.Label(self.root, text="Delta Alpha:").grid(row=11, column=2, padx=5, pady=5)
-        self.delta_alpha_entry = tk.Entry(self.root, width=10)
-        self.delta_alpha_entry.insert(0, "0.0")
-        self.delta_alpha_entry.grid(row=11, column=3, padx=5, pady=5)
-
-        tk.Label(self.root, text="Delta ωp (Plasma Frequency):").grid(row=12, column=0, padx=5, pady=5)
-        self.delta_omega_p_entry = tk.Entry(self.root, width=10)
-        self.delta_omega_p_entry.insert(0, "0.0")
-        self.delta_omega_p_entry.grid(row=12, column=1, padx=5, pady=5)
-
-        tk.Label(self.root, text="Delta f (Oscillator Strength):").grid(row=12, column=2, padx=5, pady=5)
-        self.delta_f_entry = tk.Entry(self.root, width=10)
-        self.delta_f_entry.insert(0, "0.0")
-        self.delta_f_entry.grid(row=12, column=3, padx=5, pady=5)
-
-        tk.Label(self.root, text="Delta Γ (Damping Frequency):").grid(row=13, column=0, padx=5, pady=5)
-        self.delta_gamma_entry = tk.Entry(self.root, width=10)
-        self.delta_gamma_entry.insert(0, "0.0")
-        self.delta_gamma_entry.grid(row=13, column=1, padx=5, pady=5)
-
-        tk.Label(self.root, text="Delta ω (Resonant Frequency):").grid(row=13, column=2, padx=5, pady=5)
-        self.delta_omega_entry = tk.Entry(self.root, width=10)
-        self.delta_omega_entry.insert(0, "0.0")
-        self.delta_omega_entry.grid(row=13, column=3, padx=5, pady=5)
-
-        # Mystery Metal Options
+        # Mystery Metal Frame
         self.mystery_metal_frame = ttk.Frame(self.root)
-        tk.Label(self.mystery_metal_frame, text="Mystery Metal Thickness (nm):").grid(row=0, column=0, padx=5, pady=5)
+        self.mystery_metal_frame.grid(row=10, column=0, columnspan=4, pady=5, sticky="w")
+
+        tk.Label(self.mystery_metal_frame, text="Thickness (nm):").grid(row=0, column=0, padx=5, pady=5)
         self.mystery_thickness_entry = tk.Entry(self.mystery_metal_frame, width=10)
         self.mystery_thickness_entry.grid(row=0, column=1, padx=5, pady=5)
 
@@ -187,39 +173,76 @@ class LayerConfig:
         self.mystery_wp_entry = tk.Entry(self.mystery_metal_frame, width=10)
         self.mystery_wp_entry.grid(row=2, column=1, padx=5, pady=5)
 
-        # Standard Metal Configuration (when Mystery Metal is unchecked)
+        # Standard Metal Frame
         self.standard_metal_frame = ttk.Frame(self.root)
-        self.standard_metal_frame.grid(row=15, column=0, columnspan=4, pady=5, sticky="w")
-        tk.Label(self.standard_metal_frame, text="Standard Metal Configuration:", font=("Helvetica Neue", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
+        self.standard_metal_frame.grid(row=11, column=0, columnspan=4, pady=5, sticky="w")
 
-        tk.Button(self.root, text="Add Metal Layer", command=self.add_metal_layer).grid(row=13, column=0, columnspan=4, pady=5)
+        tk.Label(
+            self.standard_metal_frame,
+            text="Standard Metal Configuration:",
+            font=("Helvetica Neue", 12, "bold"),
+        ).grid(row=0, column=0, columnspan=4, sticky="w")
 
-        self.metal_layer_list = tk.Listbox(self.root, height=5, width=60)
-        self.metal_layer_list.grid(row=14, column=0, columnspan=4, pady=10)
+        tk.Label(self.standard_metal_frame, text="Material:").grid(row=1, column=0, padx=5, pady=5)
+        self.metal_material_var = tk.StringVar(value="Au")
+        ttk.Combobox(
+            self.standard_metal_frame,
+            textvariable=self.metal_material_var,
+            values=["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"],
+            width=10,
+        ).grid(row=1, column=1, padx=5, pady=5)
 
-        tk.Button(self.root, text="Edit Selected Layer", command=self.edit_metal_layer).grid(row=16, column=1, columnspan=2, pady=5)
-        tk.Button(self.root, text="Clear Metal Layers", command=self.clear_metal_layers).grid(row=16, column=0, columnspan=2, pady=5)
-        tk.Button(self.root, text="Delete Selected Layer", command=self.delete_metal_layer).grid(row=16, column=2, columnspan=4, pady=5)
+        tk.Label(self.standard_metal_frame, text="Thickness (nm):").grid(row=2, column=0, padx=5, pady=5)
+        self.metal_thickness_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.metal_thickness_entry.grid(row=2, column=1, padx=5, pady=5)
+
+        # Delta parameters
+        self.delta_n_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.delta_n_entry.grid(row=3, column=1, padx=5, pady=5)
+        self.delta_n_entry.insert(0, "0.0")
+
+        self.delta_alpha_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.delta_alpha_entry.grid(row=3, column=3, padx=5, pady=5)
+        self.delta_alpha_entry.insert(0, "0.0")
+
+        self.delta_omega_p_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.delta_omega_p_entry.grid(row=4, column=1, padx=5, pady=5)
+        self.delta_omega_p_entry.insert(0, "0.0")
+
+        self.delta_f_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.delta_f_entry.grid(row=4, column=3, padx=5, pady=5)
+        self.delta_f_entry.insert(0, "0.0")
+
+        self.delta_gamma_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.delta_gamma_entry.grid(row=5, column=1, padx=5, pady=5)
+        self.delta_gamma_entry.insert(0, "0.0")
+
+        self.delta_omega_entry = tk.Entry(self.standard_metal_frame, width=10)
+        self.delta_omega_entry.grid(row=5, column=3, padx=5, pady=5)
+        self.delta_omega_entry.insert(0, "0.0")
+
+        # Buttons
+        tk.Button(self.standard_metal_frame, text="Add Metal Layer", command=self.add_metal_layer).grid(row=8, column=0, padx=5, pady=5)
+        tk.Button(self.standard_metal_frame, text="Edit Selected Layer", command=self.edit_metal_layer).grid(row=8, column=1, padx=5, pady=5)
+        tk.Button(self.standard_metal_frame, text="Delete Selected Layer", command=self.delete_metal_layer).grid(row=8, column=2, padx=5, pady=5)
+
+        self.metal_layer_list = tk.Listbox(self.standard_metal_frame, height=5, width=60)
+        self.metal_layer_list.grid(row=9, column=0, columnspan=4, pady=5)
 
     def toggle_mystery_metal(self):
         if self.mystery_metal_var.get():
-            # Hide standard options and show mystery metal options
-            self.mystery_metal_frame.grid()
-            self.standard_metal_frame.grid_remove()            
-            self.mystery_metal_frame.grid(row=10, column=0, columnspan=4, pady=5)
-        else:
-            # Show standard options and hide mystery metal options
-            self.mystery_metal_frame.grid_forget()
-            self.standard_metal_frame.grid(row=10, column=0, columnspan=4, pady=5)
-
-    def add_metal_layer(self):
-
-        if self.mystery_metal_var.get():
-            # Add mystery metal layer
-            thickness = float(self.mystery_thickness_entry.get())
-            f0 = float(self.mystery_f0_entry.get())
-            gamma0 = float(self.mystery_gamma0_entry.get())
-            wp = float(self.mystery_wp_entry.get())
+            print("Mystery Metal selected.")
+            # Hide or disable standard metal configurations
+            self.standard_metal_frame.grid_forget()
+            self.mystery_metal_frame.grid(row=14, column=0, columnspan=4, padx=5, pady=5, sticky="w")
+            try:
+                thickness = float(self.mystery_thickness_entry.get())
+                f0 = float(self.mystery_f0_entry.get())
+                gamma0 = float(self.mystery_gamma0_entry.get())
+                wp = float(self.mystery_wp_entry.get())
+            except ValueError:
+                tk.messagebox.showerror("Input Error", "Please provide valid numerical values for the Mystery Metal parameters.")
+                return
             self.metal_layers.append({
                 "type": "Mystery",
                 "thickness": thickness,
@@ -227,29 +250,41 @@ class LayerConfig:
                 "Γ0": gamma0,
                 "ωp": wp
             })
-            self.metal_layer_list.insert(tk.END, f"Mystery Metal: {thickness} nm, f₀={f0}, Γ₀={gamma0}, ωₚ={wp}")
-        else:
-            thickness = float(self.metal_thickness_entry.get())
-            metal = self.metal_material_var.get()
-            delta_n = float(self.delta_n_entry.get())
-            delta_alpha = float(self.delta_alpha_entry.get())
-
-            delta_omega_p = float(self.delta_omega_p_entry.get())
-            delta_f = float(self.delta_f_entry.get())
-            delta_gamma = float(self.delta_gamma_entry.get())
-            delta_omega = float(self.delta_omega_entry.get())
-
-            #layer = [thickness, "Lorentz-Drude", [metal]]
-            layer = [thickness, "Lorentz-Drude", [metal, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega]]
-
+            layer = [thickness, "Drude", [f0, wp, gamma0]]
+            print(layer)
             self.metal_layers.append(layer)
 
-            self.metal_layer_list.insert(tk.END, (
-                f"{metal} - {thickness} nm, "
-                f"Δn={delta_n}, Δα={delta_alpha}, "
-                f"Δωp={delta_omega_p}, Δf={delta_f}, "
-                f"ΔΓ={delta_gamma}, Δω={delta_omega}"
-            ))
+            # self.metal_layer_list.insert(tk.END, f"Mystery Metal: {thickness} nm, f₀={f0}, Γ₀={gamma0}, ωₚ={wp}")
+
+        else:
+            # Show standard options and hide mystery metal options
+            
+            self.mystery_metal_frame.grid_forget()
+            self.standard_metal_frame.grid(row=10, column=0, columnspan=4, pady=5)
+
+    def add_metal_layer(self):
+
+        thickness = float(self.metal_thickness_entry.get())
+        metal = self.metal_material_var.get()
+        delta_n = float(self.delta_n_entry.get())
+        delta_alpha = float(self.delta_alpha_entry.get())
+
+        delta_omega_p = float(self.delta_omega_p_entry.get())
+        delta_f = float(self.delta_f_entry.get())
+        delta_gamma = float(self.delta_gamma_entry.get())
+        delta_omega = float(self.delta_omega_entry.get())
+
+        #layer = [thickness, "Lorentz-Drude", [metal]]
+        layer = [thickness, "Lorentz-Drude", [metal, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega]]
+
+        self.metal_layers.append(layer)
+
+        self.metal_layer_list.insert(tk.END, (
+            f"{metal} - {thickness} nm, "
+            f"Δn={delta_n}, Δα={delta_alpha}, "
+            f"Δωp={delta_omega_p}, Δf={delta_f}, "
+            f"ΔΓ={delta_gamma}, Δω={delta_omega}"
+        ))
 
         #save_settings(self.settings)
 

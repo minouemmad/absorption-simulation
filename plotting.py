@@ -1,9 +1,11 @@
 #plotting.py - Manages the reflectance calculation and plotting.
 import numpy as np
+import tkinter as tk
 import matplotlib.pyplot as plt
 import Funcs as MF
 from utils import *
 from scipy.interpolate import make_interp_spline
+from tkinter import messagebox
 
 
 class PlotReflectance:
@@ -11,6 +13,14 @@ class PlotReflectance:
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
         self.substrate_layer = substrate_layer
+
+        self.include_absorption_var = tk.BooleanVar(value=True)
+        # Add a checkbox to toggle absorption
+        self.absorption_checkbox = tk.Checkbutton(
+            text="Include Absorption", variable=self.include_absorption_var,
+            command=self.update_plot)
+        self.absorption_checkbox.grid(row=0, column=0, padx=5, pady=5)
+
 
     def plot_raw_data(self, raw_data):
         # Check if raw_data is a file path or DataFrame
@@ -61,6 +71,14 @@ class PlotReflectance:
         plt.grid()
         plt.title("Reflectance vs. Wavelength")
         plt.show()
+
+    def update_plot(self):
+        # Get the current state of the checkbox
+        include_absorption = self.include_absorption_var.get()
+        
+        # Call plot_stack with the updated absorption flag
+        self.plot_stack(incang=45, polarization="both", include_absorption=include_absorption)
+
 
     def plot_stack(self, angle, polarization, include_absorption=True):
         settings = load_settings()
