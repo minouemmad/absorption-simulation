@@ -19,7 +19,7 @@ class PlotReflectance:
         self.absorption_checkbox = tk.Checkbutton(
             text="Include Absorption", variable=self.include_absorption_var,
             command=self.update_plot)
-        self.absorption_checkbox.grid(row=0, column=0, padx=5, pady=5)
+        self.absorption_checkbox.grid(row=0, column=6, padx=5, pady=5)
 
 
     def plot_raw_data(self, raw_data):
