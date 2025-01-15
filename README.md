@@ -3,7 +3,7 @@
 Simulate reflectance and absorption from given inputs and fit the graph to your experimental plot.
 
 <p align="center">
-  <img src="./examples/example.png" alt="Fitted Reflection Simulation for TiPtAu" width="738">
+  <img src="./examples/TiPtAu_example.png" alt="Fitted Reflection Simulation for TiPtAu" width="738">
 </p>
 
 ## Features

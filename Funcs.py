@@ -6,7 +6,7 @@ import LD   # import from "Lorentz_Drude_funcs.py"
 
 def calc_Nlayer(layers,x,num_lay):
     case = layers[num_lay][1]
-
+    print(case)
     params = layers[num_lay][2]
 
     while len(params)<7:

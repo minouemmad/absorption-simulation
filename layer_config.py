@@ -169,9 +169,10 @@ class LayerConfig:
         self.mystery_gamma0_entry = tk.Entry(self.mystery_metal_frame, width=10)
         self.mystery_gamma0_entry.grid(row=1, column=3, padx=5, pady=5)
 
-        tk.Label(self.mystery_metal_frame, text="ωₚ:").grid(row=2, column=0, padx=5, pady=5)
+        tk.Label(self.mystery_metal_frame, text="ωₚ:").grid(row=1, column=4, padx=5, pady=5)
         self.mystery_wp_entry = tk.Entry(self.mystery_metal_frame, width=10)
-        self.mystery_wp_entry.grid(row=2, column=1, padx=5, pady=5)
+        self.mystery_wp_entry.grid(row=1, column=5, padx=5, pady=5)
+
 
         # Standard Metal Frame
         self.standard_metal_frame = ttk.Frame(self.root)
@@ -197,26 +198,33 @@ class LayerConfig:
         self.metal_thickness_entry.grid(row=2, column=1, padx=5, pady=5)
 
         # Delta parameters
+
+        tk.Label(self.standard_metal_frame, text="Delta n:").grid(row=3, column=0, padx=5, pady=5)
         self.delta_n_entry = tk.Entry(self.standard_metal_frame, width=10)
         self.delta_n_entry.grid(row=3, column=1, padx=5, pady=5)
         self.delta_n_entry.insert(0, "0.0")
 
+        tk.Label(self.standard_metal_frame, text="Delta Alpha:").grid(row=3, column=2, padx=5, pady=5)
         self.delta_alpha_entry = tk.Entry(self.standard_metal_frame, width=10)
         self.delta_alpha_entry.grid(row=3, column=3, padx=5, pady=5)
         self.delta_alpha_entry.insert(0, "0.0")
 
+        tk.Label(self.standard_metal_frame, text="Delta ωp (Plasma Frequency):").grid(row=4, column=0, padx=5, pady=5)
         self.delta_omega_p_entry = tk.Entry(self.standard_metal_frame, width=10)
         self.delta_omega_p_entry.grid(row=4, column=1, padx=5, pady=5)
         self.delta_omega_p_entry.insert(0, "0.0")
 
+        tk.Label(self.standard_metal_frame, text="Delta f (Oscillator Strength):").grid(row=4, column=2, padx=5, pady=5)
         self.delta_f_entry = tk.Entry(self.standard_metal_frame, width=10)
         self.delta_f_entry.grid(row=4, column=3, padx=5, pady=5)
         self.delta_f_entry.insert(0, "0.0")
 
+        tk.Label(self.standard_metal_frame, text="Delta Γ (Damping Frequency):").grid(row=5, column=0, padx=5, pady=5)
         self.delta_gamma_entry = tk.Entry(self.standard_metal_frame, width=10)
         self.delta_gamma_entry.grid(row=5, column=1, padx=5, pady=5)
         self.delta_gamma_entry.insert(0, "0.0")
 
+        tk.Label(self.standard_metal_frame, text="Delta ω (Resonant Frequency):").grid(row=5, column=2, padx=5, pady=5)
         self.delta_omega_entry = tk.Entry(self.standard_metal_frame, width=10)
         self.delta_omega_entry.grid(row=5, column=3, padx=5, pady=5)
         self.delta_omega_entry.insert(0, "0.0")
@@ -235,23 +243,21 @@ class LayerConfig:
             # Hide or disable standard metal configurations
             self.standard_metal_frame.grid_forget()
             self.mystery_metal_frame.grid(row=14, column=0, columnspan=4, padx=5, pady=5, sticky="w")
-            try:
-                thickness = float(self.mystery_thickness_entry.get())
-                f0 = float(self.mystery_f0_entry.get())
-                gamma0 = float(self.mystery_gamma0_entry.get())
-                wp = float(self.mystery_wp_entry.get())
-            except ValueError:
-                tk.messagebox.showerror("Input Error", "Please provide valid numerical values for the Mystery Metal parameters.")
-                return
-            self.metal_layers.append({
-                "type": "Mystery",
-                "thickness": thickness,
-                "f0": f0,
-                "Γ0": gamma0,
-                "ωp": wp
-            })
+            
+            thickness = float(self.mystery_thickness_entry.get())
+            f0 = float(self.mystery_f0_entry.get())
+            gamma0 = float(self.mystery_gamma0_entry.get())
+            wp = float(self.mystery_wp_entry.get())
+
+            # self.metal_layers.append({
+            #     "type": "Mystery",
+            #     "thickness": thickness,
+            #     "f0": f0,
+            #     "Γ0": gamma0,
+            #     "ωp": wp
+            # })
             layer = [thickness, "Drude", [f0, wp, gamma0]]
-            print(layer)
+            print(f"layer: {layer}")
             self.metal_layers.append(layer)
 
             # self.metal_layer_list.insert(tk.END, f"Mystery Metal: {thickness} nm, f₀={f0}, Γ₀={gamma0}, ωₚ={wp}")
@@ -359,5 +365,4 @@ class LayerConfig:
                     dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
                 else:
                     dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
-        print(f"DBR Stack: {dbr_stack}")
         return dbr_stack, self.metal_layers, substrate_layer

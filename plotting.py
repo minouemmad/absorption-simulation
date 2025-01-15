@@ -102,7 +102,7 @@ class PlotReflectance:
         Ls_structure = (
             [[np.nan, "Constant", [1.0, 0.0]]] +  # Initial spacer layer
             metal_layers +                        # Metal layers
-            [[239., "Constant", [3.101, 0.0]]] +  # Example additional layer
+            # [[239., "Constant", [3.101, 0.0]]] +  # Example additional layer
             dbr_stack +                           # DBR stack layers
             substrate_material                    # Substrate layer
         )
@@ -163,6 +163,7 @@ class PlotReflectance:
     
         # Adjust y-axis range to [0, 1]
         ax1.set_ylim([0, 1])  # Set the y-axis range from 0 to 1
+        ax1.set_yticks(np.arange(0, 1, 0.1))  
     
         # Add grid
         ax1.grid(alpha=0.2)
