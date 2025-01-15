@@ -1,46 +1,44 @@
 #plotting.py - Manages the reflectance calculation and plotting.
 import numpy as np
+import pandas as pd
 import tkinter as tk
 import matplotlib.pyplot as plt
-import Funcs as MF
-from utils import *
 from scipy.interpolate import make_interp_spline
 from tkinter import messagebox
+from utils import load_settings, save_settings
+import Funcs as MF
 
 
 class PlotReflectance:
-    def __init__(self, dbr_stack, metal_layers, substrate_layer):
+    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None):
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
         self.substrate_layer = substrate_layer
 
         self.include_absorption_var = tk.BooleanVar(value=True)
+        
         # Add a checkbox to toggle absorption
         self.absorption_checkbox = tk.Checkbutton(
             text="Include Absorption", variable=self.include_absorption_var,
             command=self.update_plot)
         self.absorption_checkbox.grid(row=0, column=6, padx=5, pady=5)
 
-
     def plot_raw_data(self, raw_data):
-        # Check if raw_data is a file path or DataFrame
+        """Plot raw reflectance data from a CSV file or DataFrame."""
+        # Load data from a file or ensure it's a DataFrame
         if isinstance(raw_data, str):  # Assuming raw_data is a file path
             try:
-                raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"], 
+                raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"],
                                        delimiter=",", engine="python")
             except Exception as e:
                 raise ValueError(f"Failed to load file: {e}")
         elif not isinstance(raw_data, pd.DataFrame):
             raise TypeError("raw_data should be a pandas DataFrame or a CSV file path.")
-        
-        # Convert wavelength from nm to µm if needed
-        if raw_data['wavelength'].max() > 100:  # Assuming large values mean nm
-            raw_data['wavelength'] = raw_data['wavelength'] / 1000.0  # Convert to µm
 
         # Filter the data to include only the range of interest (e.g., 2.5 to 12 µm)
         min_wavelength = max(2.5, raw_data['wavelength'].min())
         max_wavelength = min(12, raw_data['wavelength'].max())
-        filtered_data = raw_data[(raw_data['wavelength'] >= min_wavelength) & 
+        filtered_data = raw_data[(raw_data['wavelength'] >= min_wavelength) &
                                  (raw_data['wavelength'] <= max_wavelength)]
         
         if filtered_data.empty:
@@ -63,7 +61,7 @@ class PlotReflectance:
         )
         plt.scatter(
             filtered_data['wavelength'], filtered_data['reflectance'],
-            color="red", label="Data Points", zorder=5
+            color="red", label="Data Points", zorder=5, alpha=0.6, s=15  # Reduced size of points
         )
         plt.xlabel("Wavelength (µm)")
         plt.ylabel("Reflectance (%)")
@@ -77,8 +75,7 @@ class PlotReflectance:
         include_absorption = self.include_absorption_var.get()
         
         # Call plot_stack with the updated absorption flag
-        self.plot_stack(incang=45, polarization="both", include_absorption=include_absorption)
-
+        self.plot_stack(angle=45, polarization="both", include_absorption=include_absorption)
 
     def plot_stack(self, angle, polarization, include_absorption=True):
         settings = load_settings()

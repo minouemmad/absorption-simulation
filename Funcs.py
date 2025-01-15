@@ -6,7 +6,6 @@ import LD   # import from "Lorentz_Drude_funcs.py"
 
 def calc_Nlayer(layers,x,num_lay):
     case = layers[num_lay][1]
-    print(case)
     params = layers[num_lay][2]
 
     while len(params)<7:
@@ -17,7 +16,6 @@ def calc_Nlayer(layers,x,num_lay):
 
     if case == 'Constant':
         v2p=[layers[num_lay][2][0],layers[num_lay][2][1]]
-        #print(v2p)
         nnn=v2p[0]; kap=abs(v2p[1])
         Nlay=(nnn-1j*kap)*ones(x.size)
     elif case == 'Cauchy':
@@ -85,6 +83,7 @@ def calc_Nlayer(layers,x,num_lay):
         epsilon = epsilon_D
         Nlay = sqrt(epsilon)
         print(f"Drude Nlay: {Nlay}")
+        
     elif case == 'File':
         aux=loadtxt(layers[num_lay][2][0]) # N,k data
         nnn=interp(x,aux[:,0],aux[:,1]) 

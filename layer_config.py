@@ -233,6 +233,7 @@ class LayerConfig:
         tk.Button(self.standard_metal_frame, text="Add Metal Layer", command=self.add_metal_layer).grid(row=8, column=0, padx=5, pady=5)
         tk.Button(self.standard_metal_frame, text="Edit Selected Layer", command=self.edit_metal_layer).grid(row=8, column=1, padx=5, pady=5)
         tk.Button(self.standard_metal_frame, text="Delete Selected Layer", command=self.delete_metal_layer).grid(row=8, column=2, padx=5, pady=5)
+        tk.Button(self.standard_metal_frame, text="Clear Layers", command=self.delete_metal_layer).grid(row=8, column=3, padx=5, pady=5)
 
         self.metal_layer_list = tk.Listbox(self.standard_metal_frame, height=5, width=60)
         self.metal_layer_list.grid(row=9, column=0, columnspan=4, pady=5)

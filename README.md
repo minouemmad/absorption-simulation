@@ -66,9 +66,7 @@ Fine-tune your simulation to match experimental results with the following adjus
 4. **Optimize Fit**:
    - Repeat the process until the simulated spectra align with your experimental results.
 
-<p align="center">
-  <img src="./examples/Parameter_Adjustment_UI.png" alt="Parameter Adjustment UI" width="738">
-</p>
+
 
 ---
 
