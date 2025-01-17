@@ -32,29 +32,6 @@ class LayerConfig:
         self.main_frame = ttk.Frame(self.root, padding="10")
         self.main_frame.grid(sticky=("N", "S", "E", "W"))
 
-        # # Create a canvas to allow scrolling
-        # self.canvas = tk.Canvas(self.root, width=700, height=820)
-        # self.canvas.grid(row=0, column=0, sticky="nsew")
-
-        # # Add scrollbars
-        # self.v_scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
-        # self.v_scrollbar.grid(row=0, column=1, sticky="ns")
-        # self.h_scrollbar = ttk.Scrollbar(self.root, orient="horizontal", command=self.canvas.xview)
-        # self.h_scrollbar.grid(row=1, column=0, sticky="ew")
-
-        # # Configure canvas scrolling
-        # self.canvas.configure(yscrollcommand=self.v_scrollbar.set, xscrollcommand=self.h_scrollbar.set)
-
-        # # Create a frame inside the canvas
-        # self.scrollable_frame = ttk.Frame(self.canvas)
-        # self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-
-        # # Add the frame to the canvas
-        # self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
-        # # Populate the scrollable frame with GUI elements
-        # self.setup_substrate_selection()
-
     def setup_substrate_selection(self):
         # Substrate selection section
         tk.Label(self.root, 
@@ -161,17 +138,36 @@ class LayerConfig:
         self.mystery_thickness_entry = tk.Entry(self.mystery_metal_frame, width=10)
         self.mystery_thickness_entry.grid(row=0, column=1, padx=5, pady=5)
 
+        # Drude parameters
+        self.f0_var = tk.StringVar(value="0")
+        self.gamma0_var = tk.StringVar(value="0")
+        self.wp_var = tk.StringVar(value="0")
+
+        # f₀ parameter
         tk.Label(self.mystery_metal_frame, text="f₀:").grid(row=1, column=0, padx=5, pady=5)
-        self.mystery_f0_entry = tk.Entry(self.mystery_metal_frame, width=10)
+        self.mystery_f0_entry = tk.Entry(self.mystery_metal_frame, textvariable=self.f0_var, width=10)
         self.mystery_f0_entry.grid(row=1, column=1, padx=5, pady=5)
+        f0_slider = tk.Scale(self.mystery_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
+                             variable=self.f0_var)
+        f0_slider.grid(row=1, column=2, padx=5, pady=5)
 
-        tk.Label(self.mystery_metal_frame, text="Γ₀:").grid(row=1, column=2, padx=5, pady=5)
-        self.mystery_gamma0_entry = tk.Entry(self.mystery_metal_frame, width=10)
-        self.mystery_gamma0_entry.grid(row=1, column=3, padx=5, pady=5)
+        # Γ₀ parameter
+        tk.Label(self.mystery_metal_frame, text="Γ₀:").grid(row=2, column=0, padx=5, pady=5)
+        self.mystery_gamma0_entry = tk.Entry(self.mystery_metal_frame, textvariable=self.gamma0_var, width=10)
+        self.mystery_gamma0_entry.grid(row=2, column=1, padx=5, pady=5)
+        gamma0_slider = tk.Scale(self.mystery_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
+                                 variable=self.gamma0_var)
+        gamma0_slider.grid(row=2, column=2, padx=5, pady=5)
 
-        tk.Label(self.mystery_metal_frame, text="ωₚ:").grid(row=1, column=4, padx=5, pady=5)
-        self.mystery_wp_entry = tk.Entry(self.mystery_metal_frame, width=10)
-        self.mystery_wp_entry.grid(row=1, column=5, padx=5, pady=5)
+        # ωₚ parameter
+        tk.Label(self.mystery_metal_frame, text="ωₚ:").grid(row=3, column=0, padx=5, pady=5)
+        self.mystery_wp_entry = tk.Entry(self.mystery_metal_frame, textvariable=self.wp_var, width=10)
+        self.mystery_wp_entry.grid(row=3, column=1, padx=5, pady=5)
+        wp_slider = tk.Scale(self.mystery_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
+                             variable=self.wp_var)
+        wp_slider.grid(row=3, column=2, padx=5, pady=5)
+
+        tk.Button(self.mystery_metal_frame, text="Update Configuration", command=self.update_mystery_metal_params).grid(row=9, column=3, padx=5, pady=5, sticky="w")
 
 
         # Standard Metal Frame
@@ -250,24 +246,39 @@ class LayerConfig:
             gamma0 = float(self.mystery_gamma0_entry.get())
             wp = float(self.mystery_wp_entry.get())
 
-            # self.metal_layers.append({
-            #     "type": "Mystery",
-            #     "thickness": thickness,
-            #     "f0": f0,
-            #     "Γ0": gamma0,
-            #     "ωp": wp
-            # })
             layer = [thickness, "Drude", [f0, wp, gamma0]]
             print(f"layer: {layer}")
             self.metal_layers.append(layer)
 
-            # self.metal_layer_list.insert(tk.END, f"Mystery Metal: {thickness} nm, f₀={f0}, Γ₀={gamma0}, ωₚ={wp}")
 
         else:
             # Show standard options and hide mystery metal options
             
             self.mystery_metal_frame.grid_forget()
             self.standard_metal_frame.grid(row=10, column=0, columnspan=4, pady=5)
+
+    def update_mystery_metal_params(self):
+        """Update mystery metal parameters from GUI inputs."""
+        try:
+            # Retrieve values from GUI
+            thickness = float(self.mystery_thickness_entry.get())
+            f0 = float(self.f0_var.get())
+            gamma0 = float(self.gamma0_var.get())
+            wp = float(self.wp_var.get())
+
+            # Update settings
+            self.settings["metal_layers"] = [
+                {"thickness": thickness, "f0": f0, "gamma0": gamma0, "wp": wp}
+            ]
+            layer = [thickness, "Drude", [f0, wp, gamma0]]
+            self.metal_layers.append(layer)
+            print(f"layer: {layer}")
+            # Optionally, you can display confirmation or logging
+            print("Updated Drude Parameters:", self.settings["metal_layers"])
+
+        except ValueError:
+            # Handle invalid inputs gracefully
+            messagebox.showerror("Invalid Input", "Please enter valid numerical values for Drude parameters.")
 
     def add_metal_layer(self):
 
