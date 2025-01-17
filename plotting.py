@@ -23,7 +23,7 @@ class PlotReflectance:
             command=self.update_plot)
         self.absorption_checkbox.grid(row=0, column=6, padx=5, pady=5)
 
-    def plot_raw_data(self, raw_data):
+    def plot_raw_data(self, raw_data): 
         """Plot raw reflectance data from a CSV file or DataFrame."""
         # Load data from a file or ensure it's a DataFrame
         if isinstance(raw_data, str):  # Assuming raw_data is a file path
@@ -34,30 +34,40 @@ class PlotReflectance:
                 raise ValueError(f"Failed to load file: {e}")
         elif not isinstance(raw_data, pd.DataFrame):
             raise TypeError("raw_data should be a pandas DataFrame or a CSV file path.")
-
+    
+        # Ensure 'wavelength' and 'reflectance' columns are numeric
+        raw_data['wavelength'] = pd.to_numeric(raw_data['wavelength'], errors='coerce')
+        raw_data['reflectance'] = pd.to_numeric(raw_data['reflectance'], errors='coerce')
+    
+        # Drop rows with NaN values
+        raw_data = raw_data.dropna(subset=['wavelength', 'reflectance'])
+    
         # Filter the data to include only the range of interest (e.g., 2.5 to 12 µm)
         min_wavelength = max(2.5, raw_data['wavelength'].min())
         max_wavelength = min(12, raw_data['wavelength'].max())
         filtered_data = raw_data[(raw_data['wavelength'] >= min_wavelength) &
                                  (raw_data['wavelength'] <= max_wavelength)]
-        
+    
         if filtered_data.empty:
             raise ValueError("No data points found in the specified wavelength range (2.5–12 µm).")
-
+    
         # Handle duplicates: Group by wavelength and average reflectance
-        filtered_data = filtered_data.groupby("wavelength", as_index=False).mean()
-
+        filtered_data = filtered_data.groupby("wavelength", as_index=False)["reflectance"].mean()
+    
         # Smooth curve using dense interpolation
         smooth_wavelengths = np.linspace(filtered_data['wavelength'].min(),
                                           filtered_data['wavelength'].max(), 500)
         smooth_reflectance = make_interp_spline(
             filtered_data['wavelength'], filtered_data['reflectance'], k=3  # Cubic spline
         )(smooth_wavelengths)
-
+    
         # Plot the data points and smooth curve
-        plt.figure(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.patch.set_alpha(0)  # Transparent figure background
+        ax.set_facecolor("none")  # Transparent axes background
+    
         plt.plot(
-            smooth_wavelengths, smooth_reflectance, label="Smoothed Curve", color="blue", linewidth=2
+            smooth_wavelengths, smooth_reflectance, label="Smoothed Curve", color="blue", linewidth=1  # Thinner line
         )
         plt.scatter(
             filtered_data['wavelength'], filtered_data['reflectance'],
@@ -65,9 +75,19 @@ class PlotReflectance:
         )
         plt.xlabel("Wavelength (µm)")
         plt.ylabel("Reflectance (%)")
+                # Adjust x-axis range and ticks
+        plt.xlim([2.5, 12])  # Limit x-axis from 2.5 to 15
+        plt.xticks(np.arange(3, 12, 1))  # Set ticks at every 1 unit, starting at 3
         plt.legend()
-        plt.grid()
+        plt.grid(alpha=0.5)
         plt.title("Reflectance vs. Wavelength")
+    
+        # Adjust y-axis limits
+        plt.ylim(0, 1)
+                # Adjust y-axis range to [0, 1]
+        plt.ylim([0, 1])  # Set the y-axis range from 0 to 1
+        plt.yticks(np.arange(0, 1, 0.1))  
+    
         plt.show()
 
     def update_plot(self):
@@ -99,7 +119,6 @@ class PlotReflectance:
         Ls_structure = (
             [[np.nan, "Constant", [1.0, 0.0]]] +  # Initial spacer layer
             metal_layers +                        # Metal layers
-            # [[239., "Constant", [3.101, 0.0]]] +  # Example additional layer
             dbr_stack +                           # DBR stack layers
             substrate_material                    # Substrate layer
         )
@@ -176,4 +195,3 @@ class PlotReflectance:
     
         # Save settings if needed
         save_settings(settings)
-    
