@@ -7,21 +7,17 @@ from scipy.interpolate import make_interp_spline
 from tkinter import messagebox
 from utils import load_settings, save_settings
 import Funcs as MF
-
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class PlotReflectance:
+
     def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None):
+
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
         self.substrate_layer = substrate_layer
 
         self.include_absorption_var = tk.BooleanVar(value=True)
-        
-        # Add a checkbox to toggle absorption
-        self.absorption_checkbox = tk.Checkbutton(
-            text="Include Absorption", variable=self.include_absorption_var,
-            command=self.update_plot)
-        self.absorption_checkbox.grid(row=0, column=6, padx=5, pady=5)
 
     def plot_raw_data(self, raw_data): 
         """Plot raw reflectance data from a CSV file or DataFrame."""
@@ -90,13 +86,7 @@ class PlotReflectance:
     
         plt.show()
 
-    def update_plot(self):
-        # Get the current state of the checkbox
-        include_absorption = self.include_absorption_var.get()
-        
-        # Call plot_stack with the updated absorption flag
-        self.plot_stack(angle=45, polarization="both", include_absorption=include_absorption)
-
+       
     def plot_stack(self, angle, polarization, include_absorption=True):
         settings = load_settings()
         dbr_stack = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
@@ -159,15 +149,7 @@ class PlotReflectance:
             ax1.plot(x / 1000, R0_avg, label='Reflectance (avg)', color='green')
         else:
             raise ValueError("Invalid polarization. Choose 's', 'p', or 'both'.")
-    
-        # Create a second y-axis for absorption if included
-        if include_absorption and Abs1 is not None:
-            ax2 = ax1.twinx()
-            ax2.plot(x / 1000, Abs1, label='Absorption', color='purple')
-            ax2.set_ylabel('Absorption', size=12)
-            ax2.set_ylim([0, 1])  # Set the y-axis range for absorption from 0 to 1
-            ax2.legend(loc='upper right')
-    
+        
         # Customize plot
         ax1.set_xlabel('Wavelength (μm)', size=12)
         ax1.set_ylabel('Reflectance', size=12)
@@ -195,3 +177,6 @@ class PlotReflectance:
     
         # Save settings if needed
         save_settings(settings)
+
+    def update_plot(self, angle, polarization, include_absorption=True):
+        self.plot_stack(angle, polarization, include_absorption)

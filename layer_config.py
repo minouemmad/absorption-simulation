@@ -139,6 +139,8 @@ class LayerConfig:
         self.mystery_thickness_entry.grid(row=0, column=1, padx=5, pady=5)
 
         # Drude parameters
+
+        # Drude parameters
         self.f0_var = tk.StringVar(value="0")
         self.gamma0_var = tk.StringVar(value="0")
         self.wp_var = tk.StringVar(value="0")
@@ -169,6 +171,9 @@ class LayerConfig:
 
         tk.Button(self.mystery_metal_frame, text="Update Configuration", command=self.update_mystery_metal_params).grid(row=9, column=3, padx=5, pady=5, sticky="w")
 
+        self.f0_var.trace_add("write", self.update_mystery_metal_params)
+        self.gamma0_var.trace_add("write", self.update_mystery_metal_params)
+        self.wp_var.trace_add("write", self.update_mystery_metal_params)
 
         # Standard Metal Frame
         self.standard_metal_frame = ttk.Frame(self.root)
@@ -257,7 +262,7 @@ class LayerConfig:
             self.mystery_metal_frame.grid_forget()
             self.standard_metal_frame.grid(row=10, column=0, columnspan=4, pady=5)
 
-    def update_mystery_metal_params(self):
+    def update_mystery_metal_params(self, *args):
         """Update mystery metal parameters from GUI inputs."""
         try:
             # Retrieve values from GUI
