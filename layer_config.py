@@ -44,6 +44,41 @@ class LayerConfig:
             self.root, textvariable=self.substrate_var, values=["GaSb", "GaAs", "Air"], width=20
         ).grid(row=1, column=0, columnspan=3, pady=5)
 
+        # Add option to choose between semi-infinite and finite substrate
+        self.is_finite_substrate = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            self.root,
+            text="Finite Substrate",
+            variable=self.is_finite_substrate,
+            font=("Helvetica Neue", 12),
+            fg="#4A90E2",
+            command=self.toggle_finite_substrate
+        ).grid(row=0, column=3, columnspan=3, sticky="w")
+
+        # Add input for substrate thickness (visible only if finite is selected)
+        tk.Label(
+            self.root,
+            text="Substrate Thickness (nm):",
+            font=("Helvetica Neue", 12),
+            fg="#4A90E2"
+        ).grid(row=1, column=3, sticky="w")
+
+        self.substrate_thickness = tk.DoubleVar(value=0)  # Default thickness value
+        self.thickness_entry = ttk.Entry(
+            self.root,
+            textvariable=self.substrate_thickness,
+            width=10
+        )
+        self.thickness_entry.grid(row=1, column=4, sticky="w")
+        self.thickness_entry.configure(state="disabled")  # Initially disabled
+
+    def toggle_finite_substrate(self):
+        """Enable or disable substrate thickness entry based on finite substrate selection."""
+        if self.is_finite_substrate.get():
+            self.thickness_entry.configure(state="normal")
+        else:
+            self.thickness_entry.configure(state="disabled")
+
     def setup_dbr_layers(self):
         # DBR layers section
         tk.Label(self.root, text="Select DBR", 

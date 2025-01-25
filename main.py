@@ -15,7 +15,7 @@ class LayerStackApp:
         
         # File upload button for raw data
         self.raw_data = None
-        upload_btn = ttkb.Button(self.root, text="Upload Raw Reflectance Data", command=self.upload_raw_data, bootstyle="primary").grid(row=0, column=3, columnspan=3, pady=10, padx=10, sticky="e")
+        upload_btn = ttkb.Button(self.root, text="Upload Raw Reflectance Data", command=self.upload_raw_data, bootstyle="primary").grid(row=0, column=5, columnspan=3, pady=10, padx=10, sticky="e")
         # Set up DBR and Metal layers
         self.layer_config = LayerConfig(self.root, self.settings)
         
@@ -24,7 +24,7 @@ class LayerStackApp:
         
 
         # Plot button for simulated data
-        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=1, column=3, columnspan=3, pady=10, padx=10, sticky="ew")
+        plot_btn = ttkb.Button(self.root, text="Plot Simulated Reflectance", command=self.plot_reflectance, bootstyle="primary").grid(row=1, column=5, columnspan=3, pady=10, padx=10, sticky="ew")
 
     def setup_incidence_inputs(self):
         tk.Label(self.root, text="Incidence Angle (degrees):").grid(row=18, column=0)

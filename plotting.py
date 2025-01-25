@@ -11,13 +11,13 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class PlotReflectance:
 
-    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None):
+    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, substrate_thickness=None):
 
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
         self.substrate_layer = substrate_layer
+        self.substrate_thickness= substrate_thickness
 
-        self.include_absorption_var = tk.BooleanVar(value=True)
 
     def plot_raw_data(self, raw_data): 
         """Plot raw reflectance data from a CSV file or DataFrame."""
@@ -87,15 +87,21 @@ class PlotReflectance:
         plt.show()
 
        
-    def plot_stack(self, angle, polarization, include_absorption=True):
+    def plot_stack(self, angle, polarization):
         settings = load_settings()
         dbr_stack = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
-    
+
         nlamb = 3500
         x = np.linspace(2.5, 15, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
     
+
+        wavelength_microns = x / 1000  # Convert to microns
+
+        # Absorption coefficient for GaSb
+        alpha = 7.6 * (4.4 ** (0.3 * wavelength_microns - 2.8)) + 1.2
+
         # Fix substrate material by replacing it with its corresponding refractive index function
         if isinstance(substrate_material, list) and len(substrate_material) > 0:
             if substrate_material[0][2] == "GaSb_ln":
@@ -132,51 +138,71 @@ class PlotReflectance:
         if polarization == "s":
             R0 = (abs(rs))**2
             T0 = np.real(Ts)
-            Abs1 = 1.0 - R0 - T0 if include_absorption else None
+            Abs1 = 1.0 - R0 - T0
             ax1.plot(x / 1000, R0, label='Reflectance (s-pol)', color='blue')
         elif polarization == "p":
             R0 = (abs(rp))**2
             T0 = np.real(Tp)
-            Abs1 = 1.0 - R0 - T0 if include_absorption else None
+            Abs1 = 1.0 - R0 - T0
             ax1.plot(x / 1000, R0, label='Reflectance (p-pol)', color='red')
         elif polarization == "both":
             R0_s = (abs(rs))**2
             R0_p = (abs(rp))**2
-            R0_avg = 0.5 * (R0_s + R0_p)  # Average reflectance for unpolarized light
-            Abs1 = 1 - R0_avg - (0.5 * (Ts + Tp)) if include_absorption else None
+            T0=(Ts+Tp)/2
+            R0 = 0.5 * (R0_s + R0_p)  # Average reflectance for unpolarized light
+            Abs1 = 1 - R0 - (0.5 * (Ts + Tp))
             ax1.plot(x / 1000, R0_s, label='Reflectance (s-pol)', color='blue', linestyle='--')
             ax1.plot(x / 1000, R0_p, label='Reflectance (p-pol)', color='red', linestyle='--')
-            ax1.plot(x / 1000, R0_avg, label='Reflectance (avg)', color='green')
+            ax1.plot(x / 1000, R0, label='Reflectance (avg)', color='green')
         else:
             raise ValueError("Invalid polarization. Choose 's', 'p', or 'both'.")
         
+
+        # Check if finite substrate is selected
+        is_finite = self.substrate_thickness is not None and self.substrate_thickness > 0
+        substrate_thickness = self.substrate_thickness if is_finite else None
+
+        substrate_thickness = self.substrate_thickness # Get the user-specified thickness
+        if substrate_thickness != None:  # Check if finite substrate is selected
+            R_finite = np.zeros_like(R0)
+            for i in range(1, 11):  # Summation term
+                term = (0.33 ** (i - 1)) * (R0 ** i) * (np.exp(-2 * alpha * substrate_thickness)) ** i
+                R_finite += term
+            R_finite = 0.33 + (0.67 ** 2) * R_finite
+
+            # Plot finite reflectance
+            ax1.plot(x, R_finite, label='Reflectance (Finite Substrate)', color='green')
+            ax1.plot(x, Abs1, label='Absorption (Finite Substrate)', color='green')
+
+        else:
+            # Plot semi-infinite reflectance
+            ax1.plot(x, R0, label='Reflectance (Semi-Infinite Substrate)', color='blue')
+            ax1.plot(x, Abs1, label='Absorption (Semi-Infinite Substrate)', color='blue')
+
         # Customize plot
         ax1.set_xlabel('Wavelength (μm)', size=12)
         ax1.set_ylabel('Reflectance', size=12)
         ax1.set_title('Reflectance and Absorption of Custom Layer Stack', size=16)
-    
+
         # Adjust x-axis range and ticks
         ax1.set_xlim([2.5, 15])  # Limit x-axis from 2.5 to 15
         ax1.set_xticks(np.arange(3, 15, 1))  # Set ticks at every 1 unit, starting at 3
-    
+
         # Adjust y-axis range to [0, 1]
         ax1.set_ylim([0, 1])  # Set the y-axis range from 0 to 1
         ax1.set_yticks(np.arange(0, 1, 0.1))  
-    
+
         # Add grid
         ax1.grid(alpha=0.2)
-    
+
         # Add legends
         ax1.legend(loc='upper left')
-    
+
         # Tight layout
         plt.tight_layout()
-    
+
         # Show the plot
         plt.show()
-    
+
         # Save settings if needed
         save_settings(settings)
-
-    def update_plot(self, angle, polarization, include_absorption=True):
-        self.plot_stack(angle, polarization, include_absorption)
