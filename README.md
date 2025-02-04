@@ -26,7 +26,7 @@ In traditional simulations, substrates are often considered semi-infinite, assum
 Our tool incorporates finite substrate modeling, utilizing empirical data from GaSb and GaAs to enhance simulation accuracy. By accounting for the actual thickness of these substrates, the tool provides a more precise representation of reflectance and absorption spectra.
 
 <p align="center">
-  <img src="./data/data/GaSb&GaAs Graphs.jpeg" alt="GaSb&GaAs Graphs" width="500">
+  <img src="./data/GaSb&GaAs Graphs.jpeg" alt="GaSb&GaAs Graphs" width="500">
 </p>
 *Source: [High power cascaded mid-infrared InAs/GaSb light emitting diodes](https://pubs.aip.org/aip/jap/article/118/12/123108/141975)*
 
@@ -35,7 +35,7 @@ Our tool incorporates finite substrate modeling, utilizing empirical data from G
 ## Unknown Metal
 
 <p align="center">
-  <img src="./examples/Unknown_metal_params_example.png" alt="Unknown metal parameters for TiPtAu" width="500">
+  <img src="./examples/Unkown_metal_params_example.png" alt="Metal parameters for TiPtAu" width="500">
 </p>
 
 For cases where the material is not predefined, you can manually input Drude parameters:

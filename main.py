@@ -33,9 +33,9 @@ class LayerStackApp:
         self.angle_entry.insert(0, "0")  # Default is normal incidence
         
         tk.Label(self.root, text="Polarization:").grid(row=19, column=0)
-        self.polarization_var = tk.StringVar(value="both")
+        self.polarization_var = tk.StringVar(value="s")
         ttk.Combobox(self.root, textvariable=self.polarization_var, 
-                     values=["s", "p", "both"]).grid(row=19, column=1, columnspan=2)
+                     values=["s", "p"]).grid(row=19, column=1, columnspan=2)
 
     def upload_raw_data(self):
         # Open file dialog for user to select the raw data file

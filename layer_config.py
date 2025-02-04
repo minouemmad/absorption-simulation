@@ -34,6 +34,8 @@ class LayerConfig:
         self.main_frame = ttk.Frame(self.root, padding="10")
         self.main_frame.grid(sticky=("N", "S", "E", "W"))
 
+
+
     def setup_substrate_selection(self):
         # Substrate selection section
         tk.Label(self.root, 
@@ -86,6 +88,29 @@ class LayerConfig:
     def get_is_finite_substrate(self):
         return self.is_finite_substrate.get()
     
+    def setup_light_direction_toggle(self):
+        """
+        Add a button to toggle the direction of light (forward or reverse).
+        """
+        # Light direction toggle button
+        self.light_direction_button = tk.Checkbutton(
+            self.root,
+            text="Reverse Light Direction(Metal->DBR->Substrate)",
+            variable=self.reverse_light_direction,
+            font=("Helvetica Neue", 12),
+            fg="#4A90E2",
+            command=self.toggle_light_direction
+        )
+        self.light_direction_button.grid(row=0, column=2, columnspan=2, sticky="w", pady=5)
+
+    def toggle_light_direction(self):
+        """
+        Toggle the direction of light and update the configuration.
+        """
+        if self.reverse_light_direction.get():
+            print("Light direction: Reverse")
+        else:
+            print("Light direction: Forward")
     def setup_dbr_layers(self):
         # DBR layers section
         tk.Label(self.root, text="Select DBR", 

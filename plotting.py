@@ -229,9 +229,3 @@ class PlotReflectance:
 
         # Show the plot
         plt.show()
-
-
-    def is_finite_substrate(self):
-        if self.layer_config:
-            return self.layer_config.get_is_finite_substrate()
-        return False
