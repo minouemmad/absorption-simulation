@@ -7,10 +7,11 @@ import ttkbootstrap as tb
 from utils import *
 
 class LayerConfig:
+    
     def __init__(self, root, settings):
         self.root = root
         self.root.title("Layer Configuration")
-        self.root.geometry("700x820")
+        self.root.geometry("900x900")
         self.root.resizable(True, True)
         self.settings = settings
         self.dbr_layers = settings["dbr_layers"]
@@ -20,6 +21,7 @@ class LayerConfig:
         self.setup_substrate_selection()
         self.setup_dbr_layers()
         self.setup_metal_layers()
+
 
     def setup_gui(self):
         
@@ -70,15 +72,20 @@ class LayerConfig:
             width=10
         )
         self.thickness_entry.grid(row=1, column=4, sticky="w")
-        self.thickness_entry.configure(state="disabled")  # Initially disabled
+
 
     def toggle_finite_substrate(self):
         """Enable or disable substrate thickness entry based on finite substrate selection."""
         if self.is_finite_substrate.get():
             self.thickness_entry.configure(state="normal")
+            print("Finite substrate selected. Thickness:", self.substrate_thickness.get())
         else:
             self.thickness_entry.configure(state="disabled")
 
+    
+    def get_is_finite_substrate(self):
+        return self.is_finite_substrate.get()
+    
     def setup_dbr_layers(self):
         # DBR layers section
         tk.Label(self.root, text="Select DBR", 
@@ -394,16 +401,18 @@ class LayerConfig:
 
     def get_layers(self):
         # Generate the substrate layer dynamically
-        substrate_layer = [
-            [
-                float('nan'),
-                "Constant",
-                "GaSb_ln" if self.substrate_var.get() == "GaSb" 
-                else "GaAs_ln" if self.substrate_var.get() == "GaAs" 
-                else [1.0, 0.0] if self.substrate_var.get() == "Air" 
-                else float('nan')  # Fallback if none of the conditions match
-            ]
-        ]
+        substrate_material = (
+            "GaSb_ln" if self.substrate_var.get() == "GaSb"
+            else "GaAs_ln" if self.substrate_var.get() == "GaAs"
+            else [1.0, 0.0] if self.substrate_var.get() == "Air"
+            else float('nan')  # Fallback if none of the conditions match
+        )
+
+        # Check if the substrate is finite
+        substrate_thickness = self.substrate_thickness.get() if self.is_finite_substrate.get() else float('nan')
+
+        # Create the substrate layer with the correct thickness
+        substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
 
         # Dynamically generate the dbr_stack
         dbr_period = self.settings["dbr_period"]
