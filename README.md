@@ -13,25 +13,38 @@ Simulate reflectance and absorption spectra for layered materials, compare them 
 ## Features
 
 - **Simulate Reflectance and Absorption**: Generate spectra based on input parameters for layered materials.
-- **Manual Drude Parameter Input**: Customize unknown metals using manually entered Drude parameters (`f0`, `γ0`, `ωp`) or adding each layer separately.
+- **Manual Drude Parameter Input**: Customize unknown metals using manually entered Drude parameters (`f0`, `γ0`, `ωp`) or by adding each layer separately.
 - **Graph Fitting**: Optimize the simulated plots to match your experimental data using intuitive parameter adjustments.
 - **Dynamic Material Adjustments**: Fine-tune optical properties like refractive index, absorption coefficient, and more.
 
 ---
 
-## New Feature: Unknown Metal
+## Finite Substrate Modeling
+
+In traditional simulations, substrates are often considered semi-infinite, assuming that the material extends infinitely without accounting for thickness variations. This simplification can lead to inaccuracies, especially for materials like Gallium Antimonide (GaSb) and Gallium Arsenide (GaAs), where substrate thickness significantly influences optical properties.
+
+Our tool incorporates finite substrate modeling, utilizing empirical data from GaSb and GaAs to enhance simulation accuracy. By accounting for the actual thickness of these substrates, the tool provides a more precise representation of reflectance and absorption spectra.
+
+<p align="center">
+  <img src="./data/data/GaSb&GaAs Graphs.jpeg" alt="GaSb&GaAs Graphs" width="500">
+</p>
+*Source: [High power cascaded mid-infrared InAs/GaSb light emitting diodes](https://pubs.aip.org/aip/jap/article/118/12/123108/141975)*
+
+---
+
+## Unknown Metal
+
+<p align="center">
+  <img src="./examples/Unknown_metal_params_example.png" alt="Unknown metal parameters for TiPtAu" width="500">
+</p>
 
 For cases where the material is not predefined, you can manually input Drude parameters:
 
-- **`f0`**: Oscillator strength  
-- **`γ0`**: Damping factor  
-- **`ωp`**: Plasma frequency  
+- **`f0`**: Oscillator strength
+- **`γ0`**: Damping factor
+- **`ωp`**: Plasma frequency
 
 These parameters allow for custom fitting of the unknown material's reflectance and absorption properties.
-
-<p align="center">
-  <img src="./examples/UnknownMetal_input.png" alt="Unknown Metal Input UI" width="738">
-</p>
 
 ---
 
@@ -39,14 +52,14 @@ These parameters allow for custom fitting of the unknown material's reflectance 
 
 Fine-tune your simulation to match experimental results with the following adjustable parameters:
 
-| Parameter  | Effect on Reflectance/Absorption |
-|------------|----------------------------------|
-| **Δn**     | Changes refractive index, shifting reflectance. |
-| **Δα**     | Adjusts absorption, darkening the spectrum. |
-| **Δωp**    | Alters plasma frequency, shifting peaks. |
-| **Δf**     | Modifies oscillator strength, intensifying peaks. |
-| **ΔΓ**     | Controls damping, affecting peak sharpness. |
-| **Δω**     | Influences resonance width, broadening or narrowing peaks. |
+| Parameter | Effect on Reflectance/Absorption |
+|-----------|----------------------------------|
+| **Δn**    | Changes refractive index, shifting reflectance. |
+| **Δα**    | Adjusts absorption, darkening the spectrum. |
+| **Δωp**   | Alters plasma frequency, shifting peaks. |
+| **Δf**    | Modifies oscillator strength, intensifying peaks. |
+| **ΔΓ**    | Controls damping, affecting peak sharpness. |
+| **Δω**    | Influences resonance width, broadening or narrowing peaks. |
 
 ---
 
@@ -66,9 +79,8 @@ Fine-tune your simulation to match experimental results with the following adjus
 4. **Optimize Fit**:
    - Repeat the process until the simulated spectra align with your experimental results.
 
-
-
 ---
 
-
 This tool is designed to streamline the process of optical simulation and experimental data fitting, making it an essential resource for researchers in material science and optics.
+
+*Note: Further optimizations are continually being implemented to enhance usability and ease of fitting.*
