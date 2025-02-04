@@ -72,7 +72,7 @@ class PlotReflectance:
         plt.xlabel("Wavelength (µm)")
         plt.ylabel("Reflectance (%)")
                 # Adjust x-axis range and ticks
-        plt.xlim([2.5, 12])  # Limit x-axis from 2.5 to 15
+        plt.xlim([2.5, 12])  # Limit x-axis from 2.5 to 12
         plt.xticks(np.arange(3, 12, 1))  # Set ticks at every 1 unit, starting at 3
         plt.legend()
         plt.grid(alpha=0.5)
@@ -93,14 +93,12 @@ class PlotReflectance:
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
         substrate_thickness = self.substrate_thickness
-        nlamb = 3500
-        x = np.linspace(2.5, 15, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
-    
 
+        nlamb = 3500
+        x = np.linspace(2.5, 12, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points
         wavelength_microns = x / 1000  # Convert to microns
 
-        # Absorption coefficient for GaSb
-        alpha = 7.6 * (4.4 ** (0.3 * wavelength_microns - 2.8)) + 1.2
+
 
         # Fix substrate material by replacing it with its corresponding refractive index function
         if isinstance(substrate_material, list) and len(substrate_material) > 0:
@@ -164,30 +162,57 @@ class PlotReflectance:
             raise ValueError("Invalid polarization. Choose 's', 'p', or 'both'.")
         
         if substrate_thickness != 0.0:  # Check if finite substrate is selected
-            print("Finite substrate thickness: " + str(substrate_thickness))
+            print("Finite substrate thickness in microns: " + str(substrate_thickness/1000))
             R_finite = np.zeros_like(R0)
-            for i in range(1, 11):  # Summation term
-                term = (0.33 ** (i - 1)) * (R0 ** i) * (np.exp(-2 * alpha * substrate_thickness)) ** i
-                R_finite += term
-            R_finite = 0.33 + (0.67 ** 2) * R_finite
 
-            # Plot finite reflectance
-            ax1.plot(x/1000, R_finite, label='Reflectance (Finite Substrate)', color='green')
-            ax1.plot(x/1000, Abs1, label='Absorption (Finite Substrate)', color='green')
+            # in microns
+            substrate_thickness=substrate_thickness/1000
+
+            # alpha=absorption coefficient for GaSb
+            # Define valid wavelength range (2 µm to 12 µm)
+            valid_range = (wavelength_microns >= 2) & (wavelength_microns <= 12)
+
+            # Initialize alpha with zeros
+            alpha = np.zeros_like(wavelength_microns)
+
+            # Compute alpha only in valid range
+            alpha[valid_range] = 7.6 * (4.4 ** (0.3 * wavelength_microns[valid_range] - 2.8)) + 1.2  
+
+            print(alpha)
+            # Precompute exp(-2 * alpha * substrate_thickness) once
+            exp_factor = np.exp(-2 * alpha * substrate_thickness)
+
+            for i in range(1, 11):  # Summation term
+                term = (0.33 ** (i - 1)) * (R0 ** i) * (exp_factor ** (substrate_thickness*i))
+                R_finite += term
+
+                print(f"Iteration {i}, term min: {term.min()}, max: {term.max()}")
+
+            # Final update for reflectance
+            R_finite = 0.33 + (0.67 ** 2) * R_finite
+            Abs1 = 1.0 - R_finite - T0
+
+            print(f"Reflectance finite percentage shape: {R_finite.shape}, min: {R_finite.min()}, max: {R_finite.max()}")
+
+            # Plot reflectance as a function of wavelength
+            ax1.plot(wavelength_microns, R_finite, label='Reflectance (Finite Substrate)', color='green')
+            ax1.plot(wavelength_microns, Abs1, label='Absorption (Finite Substrate)', color='red')
 
         else:
             # Plot semi-infinite reflectance
             ax1.plot(x/1000, R0, label='Reflectance (Semi-Infinite Substrate)', color='blue')
             ax1.plot(x/1000, Abs1, label='Absorption (Semi-Infinite Substrate)', color='green')
 
+
         # Customize plot
         ax1.set_xlabel('Wavelength (μm)', size=12)
         ax1.set_ylabel('Reflectance', size=12)
         ax1.set_title('Reflectance and Absorption of Custom Layer Stack', size=16)
 
+
         # Adjust x-axis range and ticks
-        ax1.set_xlim([2.5, 15])  # Limit x-axis from 2.5 to 15
-        ax1.set_xticks(np.arange(3, 15, 1))  # Set ticks at every 1 unit, starting at 3
+        ax1.set_xlim([2.5, 12])  # Limit x-axis from 2.5 to 12
+        ax1.set_xticks(np.arange(3, 12, 1))  # Set ticks at every 1 unit, starting at 3
 
         # Adjust y-axis range to [0, 1]
         ax1.set_ylim([0, 1])  # Set the y-axis range from 0 to 1
@@ -197,7 +222,7 @@ class PlotReflectance:
         ax1.grid(alpha=0.2)
 
         # Add legends
-        ax1.legend(loc='upper left')
+        ax1.legend(loc='upper right')
 
         # Tight layout
         plt.tight_layout()
