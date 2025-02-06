@@ -16,11 +16,13 @@ class LayerConfig:
         self.settings = settings
         self.dbr_layers = settings["dbr_layers"]
         self.metal_layers = settings["metal_layers"]
+        
 
         self.setup_gui()
         self.setup_substrate_selection()
         self.setup_dbr_layers()
         self.setup_metal_layers()
+        self.setup_light_direction_toggle()
 
 
     def setup_gui(self):
@@ -92,6 +94,8 @@ class LayerConfig:
         """
         Add a button to toggle the direction of light (forward or reverse).
         """
+            # Initialize the BooleanVar for toggling light direction
+        self.reverse_light_direction = tk.BooleanVar(value=False)
         # Light direction toggle button
         self.light_direction_button = tk.Checkbutton(
             self.root,
@@ -101,7 +105,7 @@ class LayerConfig:
             fg="#4A90E2",
             command=self.toggle_light_direction
         )
-        self.light_direction_button.grid(row=0, column=2, columnspan=2, sticky="w", pady=5)
+        self.light_direction_button.grid(row=2, column=3, columnspan=2, sticky="w", pady=5)
 
     def toggle_light_direction(self):
         """

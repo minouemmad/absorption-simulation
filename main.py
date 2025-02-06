@@ -59,7 +59,8 @@ class LayerStackApp:
         polarization = self.polarization_var.get()
         dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
         substrate_thickness = self.layer_config.substrate_thickness.get()
-        plot = PlotReflectance(dbr_stack, metal_layers, substrate_layer, substrate_thickness)
+        light_direction = self.layer_config.reverse_light_direction.get()
+        plot = PlotReflectance(dbr_stack, metal_layers, substrate_layer, substrate_thickness, light_direction)
         
         # Plot simulated reflectance overlay
         plot.plot_stack(angle, polarization)

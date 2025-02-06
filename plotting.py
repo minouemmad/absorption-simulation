@@ -11,12 +11,13 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class PlotReflectance:
 
-    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, substrate_thickness=None):
+    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, substrate_thickness=None, light_direction=None):
 
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
         self.substrate_layer = substrate_layer
         self.substrate_thickness = substrate_thickness
+        self.light_direction = light_direction
 
 
     def plot_raw_data(self, raw_data): 
@@ -119,8 +120,13 @@ class PlotReflectance:
         # Print debugging information
         print(f"Substrate Thickness: {substrate_thickness}")
         print(f"Layer Stack: {Ls_structure}")
-    
-        Ls_structure = Ls_structure[::-1]  # Reverse the structure as required
+        print(f"Light Direction: {self.light_direction}")
+        if self.light_direction:
+            print("Reversing light direction")
+            pass  # Leave the structure as is
+        else:
+            print("Normal light direction")
+            Ls_structure = Ls_structure[::-1]  # Reverse the structure as required
     
         # Print results for debugging
         print("Extracted substrate material: " + str(substrate_material))
