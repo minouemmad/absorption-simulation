@@ -11,7 +11,7 @@ class LayerConfig:
     def __init__(self, root, settings):
         self.root = root
         self.root.title("Layer Configuration")
-        self.root.geometry("900x900")
+        self.root.geometry("1920x1080")
         self.root.resizable(True, True)
         self.settings = settings
         self.dbr_layers = settings["dbr_layers"]
@@ -335,26 +335,21 @@ class LayerConfig:
 
     def update_mystery_metal_params(self, *args):
         """Update mystery metal parameters from GUI inputs."""
-        try:
-            # Retrieve values from GUI
-            thickness = float(self.mystery_thickness_entry.get())
-            f0 = float(self.f0_var.get())
-            gamma0 = float(self.gamma0_var.get())
-            wp = float(self.wp_var.get())
+        # Retrieve values from GUI
+        thickness = float(self.mystery_thickness_entry.get())
+        f0 = float(self.f0_var.get())
+        gamma0 = float(self.gamma0_var.get())
+        wp = float(self.wp_var.get())
+        # Update settings
+        self.settings["metal_layers"] = [
+            {"thickness": thickness, "f0": f0, "gamma0": gamma0, "wp": wp}
+        ]
+        layer = [thickness, "Drude", [f0, wp, gamma0]]
+        self.metal_layers.append(layer)
+        print(f"layer: {layer}")
+        # Optionally, you can display confirmation or logging
+        print("Updated Drude Parameters:", self.settings["metal_layers"])
 
-            # Update settings
-            self.settings["metal_layers"] = [
-                {"thickness": thickness, "f0": f0, "gamma0": gamma0, "wp": wp}
-            ]
-            layer = [thickness, "Drude", [f0, wp, gamma0]]
-            self.metal_layers.append(layer)
-            print(f"layer: {layer}")
-            # Optionally, you can display confirmation or logging
-            print("Updated Drude Parameters:", self.settings["metal_layers"])
-
-        except ValueError:
-            # Handle invalid inputs gracefully
-            messagebox.showerror("Invalid Input", "Please enter valid numerical values for Drude parameters.")
 
     def add_metal_layer(self):
 
