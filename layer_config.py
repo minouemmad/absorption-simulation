@@ -17,26 +17,19 @@ class LayerConfig:
         self.dbr_layers = settings["dbr_layers"]
         self.metal_layers = settings["metal_layers"]
         
-
         self.setup_gui()
         self.setup_substrate_selection()
         self.setup_dbr_layers()
         self.setup_metal_layers()
         self.setup_light_direction_toggle()
 
-
     def setup_gui(self):
-        
-        # Setting up a visually appealing theme
-        style = ttk.Style()
         # Initialize the ttkbootstrap style
         self.style = tb.Style("flatly")
 
         # Main Frame
         self.main_frame = ttk.Frame(self.root, padding="10")
         self.main_frame.grid(sticky=("N", "S", "E", "W"))
-
-
 
     def setup_substrate_selection(self):
         # Substrate selection section
@@ -308,6 +301,7 @@ class LayerConfig:
         self.metal_layer_list = tk.Listbox(self.standard_metal_frame, height=5, width=60)
         self.metal_layer_list.grid(row=9, column=0, columnspan=4, pady=5)
         self.toggle_mystery_metal()
+
     def toggle_mystery_metal(self):
         if self.mystery_metal_var.get():
             print("Mystery Metal selected.")
@@ -346,7 +340,6 @@ class LayerConfig:
         print(f"layer: {layer}")
         # Optionally, you can display confirmation or logging
         print("Updated Drude Parameters:", self.settings["metal_layers"])
-
 
     def add_metal_layer(self):
 
