@@ -1,7 +1,7 @@
 TODO
-1. Make GaSb substrate finite instead of semi infinite. R=0.33+0.67²∑(0.33)^(i-1) *R'^(i) *(e^(-2αL))^Li
-0<i<10, L=length of substrate, R'=original reflectance of stack, α=absorption coefficient. GaSb absorption coefficient vs wavelength: y=7.6*4.4^(0.3x-2.8)+1.2
 
-2. Add option to reverse the direction of light(metal, dbr, substrate)
+1. add option to add unique material layers in between dbr and metal.
 
-3. Add option to add unique material layers in between dbr and metal.
+2. add option to plot electric field distribution inside structure
+
+3. simulate Biphoton Emitter structure; measured reflection; and simulated electric field
