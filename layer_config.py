@@ -210,8 +210,6 @@ class LayerConfig:
         self.mystery_thickness_entry.grid(row=0, column=1, padx=5, pady=5)
 
         # Drude parameters
-
-        # Drude parameters
         self.f0_var = tk.StringVar(value="0")
         self.gamma0_var = tk.StringVar(value="0")
         self.wp_var = tk.StringVar(value="0")
@@ -309,7 +307,7 @@ class LayerConfig:
 
         self.metal_layer_list = tk.Listbox(self.standard_metal_frame, height=5, width=60)
         self.metal_layer_list.grid(row=9, column=0, columnspan=4, pady=5)
-
+        self.toggle_mystery_metal()
     def toggle_mystery_metal(self):
         if self.mystery_metal_var.get():
             print("Mystery Metal selected.")
@@ -325,7 +323,6 @@ class LayerConfig:
             layer = [thickness, "Drude", [f0, wp, gamma0]]
             print(f"layer: {layer}")
             self.metal_layers.append(layer)
-
 
         else:
             # Show standard options and hide mystery metal options

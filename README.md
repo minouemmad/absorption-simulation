@@ -75,7 +75,9 @@ Fine-tune your simulation to match experimental results with the following adjus
 3. **Adjust Parameters**:
    - Compare the simulated graph with your experimental data.
    - Modify parameters such as Δn, Δα, and Δωp to refine the fit.
-
+   <p align="center">
+  <img src="./examples/TiPtAu_experimental&simulation.png" alt="" width="500">
+</p>
 4. **Optimize Fit**:
    - Repeat the process until the simulated spectra align with your experimental results.
 
