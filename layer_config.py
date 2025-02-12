@@ -1,6 +1,3 @@
-#layer_config.py - Handles DBR and metal layer configurations.
-import tkinter as tk
-from tkinter import ttk, messagebox
 import tkinter as tk
 from tkinter import ttk, messagebox
 import ttkbootstrap as tb
@@ -11,42 +8,85 @@ class LayerConfig:
     def __init__(self, root, settings):
         self.root = root
         self.root.title("Layer Configuration")
-        self.root.geometry("1920x1080")
-        self.root.resizable(True, True)
+        
+        # Set window size to fit the screen (webpage-like size)
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()  # Adjust for taskbar/UI elements
+        root.geometry(f"{screen_width}x{screen_height}")  # Position at top-left corner
+        root.resizable(True, True)
+        
         self.settings = settings
         self.dbr_layers = settings["dbr_layers"]
         self.metal_layers = settings["metal_layers"]
         
+        # Create a Canvas and Scrollbar
+        self.canvas = tk.Canvas(self.root)
+        self.scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+
+        # Configure the Canvas to scroll
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=(0, 0, self.scrollable_frame.winfo_width(), self.scrollable_frame.winfo_height())
+            )
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Use grid for Canvas and Scrollbar
+        self.scrollbar.grid(row=0, column=0, sticky="ns")  # Scrollbar on the left
+        self.canvas.grid(row=0, column=1, sticky="nsew")   # Canvas on the right
+
+        # Configure root grid to expand
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(1, weight=1)  # Canvas expands
+        self.root.grid_columnconfigure(0, weight=0)  # Scrollbar does not expand
+
+        # Ensure the scrollable_frame expands within the canvas
+        self.scrollable_frame.grid_rowconfigure(0, weight=1)
+        self.scrollable_frame.grid_columnconfigure(0, weight=1)
+
+        # Prevent scrolling above row 0
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
         self.setup_gui()
         self.setup_substrate_selection()
         self.setup_dbr_layers()
         self.setup_metal_layers()
         self.setup_light_direction_toggle()
 
+    def _on_mousewheel(self, event):
+        """Prevent scrolling above row 0."""
+        if self.canvas.yview()[0] <= 0 and event.delta > 0:
+            return  # Disable scrolling up when at the top
+        self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
     def setup_gui(self):
         # Initialize the ttkbootstrap style
         self.style = tb.Style("flatly")
 
         # Main Frame
-        self.main_frame = ttk.Frame(self.root, padding="10")
+        self.main_frame = ttk.Frame(self.scrollable_frame, padding="10")
         self.main_frame.grid(sticky=("N", "S", "E", "W"))
 
     def setup_substrate_selection(self):
         # Substrate selection section
-        tk.Label(self.root, 
+        tk.Label(self.scrollable_frame, 
             text="Select Substrate", 
             font=("Helvetica Neue", 14, "bold"), 
             fg="#4A90E2",  # Modern blue color
             pady=10).grid(row=0, column=0, columnspan=3, sticky="w")        
         self.substrate_var = tk.StringVar(value=self.settings["substrate"])
         ttk.Combobox(
-            self.root, textvariable=self.substrate_var, values=["GaSb", "GaAs", "Air"], width=20
+            self.scrollable_frame, textvariable=self.substrate_var, values=["GaSb", "GaAs", "Air"], width=20
         ).grid(row=1, column=0, columnspan=3, pady=5)
 
         # Add option to choose between semi-infinite and finite substrate
         self.is_finite_substrate = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            self.root,
+            self.scrollable_frame,
             text="Finite Substrate",
             variable=self.is_finite_substrate,
             font=("Helvetica Neue", 12),
@@ -56,7 +96,7 @@ class LayerConfig:
 
         # Add input for substrate thickness (visible only if finite is selected)
         tk.Label(
-            self.root,
+            self.scrollable_frame,
             text="Substrate Thickness (nm):",
             font=("Helvetica Neue", 12),
             fg="#4A90E2"
@@ -64,12 +104,11 @@ class LayerConfig:
 
         self.substrate_thickness = tk.DoubleVar(value=0)  # Default thickness value
         self.thickness_entry = ttk.Entry(
-            self.root,
+            self.scrollable_frame,
             textvariable=self.substrate_thickness,
             width=10
         )
         self.thickness_entry.grid(row=1, column=4, sticky="w")
-
 
     def toggle_finite_substrate(self):
         """Enable or disable substrate thickness entry based on finite substrate selection."""
@@ -79,19 +118,18 @@ class LayerConfig:
         else:
             self.thickness_entry.configure(state="disabled")
 
-    
     def get_is_finite_substrate(self):
         return self.is_finite_substrate.get()
-    
+
     def setup_light_direction_toggle(self):
         """
         Add a button to toggle the direction of light (forward or reverse).
         """
-            # Initialize the BooleanVar for toggling light direction
+        # Initialize the BooleanVar for toggling light direction
         self.reverse_light_direction = tk.BooleanVar(value=False)
         # Light direction toggle button
         self.light_direction_button = tk.Checkbutton(
-            self.root,
+            self.scrollable_frame,
             text="Reverse Light Direction(Metal->DBR->Substrate)",
             variable=self.reverse_light_direction,
             font=("Helvetica Neue", 12),
@@ -108,36 +146,37 @@ class LayerConfig:
             print("Light direction: Reverse")
         else:
             print("Light direction: Forward")
+
     def setup_dbr_layers(self):
         # DBR layers section
-        tk.Label(self.root, text="Select DBR", 
+        tk.Label(self.scrollable_frame, text="Select DBR", 
             font=("Helvetica Neue", 14, "bold"), 
             fg="#4A90E2"
             , pady=10).grid(row=2, column=0, columnspan=3, sticky="w")
 
-        tk.Label(self.root, text="Material:").grid(row=3, column=0, padx=5, pady=5)
+        tk.Label(self.scrollable_frame, text="Material:").grid(row=3, column=0, padx=5, pady=5)
         self.dbr_material_var = tk.StringVar(value="GaSb")
         ttk.Combobox(
-            self.root, textvariable=self.dbr_material_var, values=["GaSb", "AlAsSb"], width=10
+            self.scrollable_frame, textvariable=self.dbr_material_var, values=["GaSb", "AlAsSb"], width=10
         ).grid(row=3, column=1, padx=5, pady=5)
 
-        tk.Label(self.root, text="Thickness (nm):").grid(row=3, column=2, padx=5, pady=5)
-        self.dbr_thickness_entry = tk.Entry(self.root, width=10)
+        tk.Label(self.scrollable_frame, text="Thickness (nm):").grid(row=3, column=2, padx=5, pady=5)
+        self.dbr_thickness_entry = tk.Entry(self.scrollable_frame, width=10)
         self.dbr_thickness_entry.grid(row=3, column=3, padx=5, pady=5)
 
-        tk.Button(self.root, text="Add DBR Layer", command=self.add_dbr_layer).grid(row=4, column=0, columnspan=4, pady=5)
+        tk.Button(self.scrollable_frame, text="Add DBR Layer", command=self.add_dbr_layer).grid(row=4, column=0, columnspan=4, pady=5)
 
-        tk.Label(self.root, text="Number of Periods:").grid(row=5, column=0, padx=5, pady=5)
-        self.dbr_period_entry = tk.Entry(self.root, width=10)
+        tk.Label(self.scrollable_frame, text="Number of Periods:").grid(row=5, column=0, padx=5, pady=5)
+        self.dbr_period_entry = tk.Entry(self.scrollable_frame, width=10)
         self.dbr_period_entry.insert(0, self.settings["dbr_period"])
         self.dbr_period_entry.grid(row=5, column=1, padx=5, pady=5)
 
-        tk.Button(self.root, text="Set DBR Period", command=self.set_dbr_period).grid(row=5, column=2, columnspan=2, pady=5)
+        tk.Button(self.scrollable_frame, text="Set DBR Period", command=self.set_dbr_period).grid(row=5, column=2, columnspan=2, pady=5)
 
-        self.dbr_layer_list = tk.Listbox(self.root, height=5, width=40)
+        self.dbr_layer_list = tk.Listbox(self.scrollable_frame, height=5, width=40)
         self.dbr_layer_list.grid(row=6, column=0, columnspan=4, pady=10)
 
-        tk.Button(self.root, text="Clear DBR Layers", command=self.clear_dbr_layers).grid(row=7, column=0, columnspan=4, pady=5)
+        tk.Button(self.scrollable_frame, text="Clear DBR Layers", command=self.clear_dbr_layers).grid(row=7, column=0, columnspan=4, pady=5)
 
     def add_dbr_layer(self):
         thickness = float(self.dbr_thickness_entry.get())
@@ -170,7 +209,7 @@ class LayerConfig:
             self.dbr_message_label.config(text=f"DBR Stack set with {len(dbr_stack)} layers.", fg="red")
         else:
             # Create the label if it doesn't already exist
-            self.dbr_message_label = tk.Label(self.root, 
+            self.dbr_message_label = tk.Label(self.scrollable_frame, 
                                           text=f"DBR Stack set with {len(dbr_stack)} layers.", 
                                           font=("Arial", 10, "italic"), 
                                           fg="#FF6347")
@@ -184,18 +223,18 @@ class LayerConfig:
 
     def setup_metal_layers(self):
         # Metal layers section
-        tk.Label(self.root, text="Define Metal Layers", 
+        tk.Label(self.scrollable_frame, text="Define Metal Layers", 
             font=("Helvetica Neue", 14, "bold"), 
             fg="#4A90E2", pady=10).grid(row=8, column=0, columnspan=3, sticky="w")
 
         # Mystery Metal toggle
-        tk.Label(self.root, text="Use Mystery Metal:").grid(row=9, column=0, padx=5, pady=5, sticky="w")
+        tk.Label(self.scrollable_frame, text="Use Mystery Metal:").grid(row=9, column=0, padx=5, pady=5, sticky="w")
         self.mystery_metal_var = tk.BooleanVar(value=False)
-        self.mystery_metal_checkbox = tk.Checkbutton(self.root, variable=self.mystery_metal_var, command=self.toggle_mystery_metal)
+        self.mystery_metal_checkbox = tk.Checkbutton(self.scrollable_frame, variable=self.mystery_metal_var, command=self.toggle_mystery_metal)
         self.mystery_metal_checkbox.grid(row=9, column=1, padx=5, pady=5, sticky="w")
 
         # Mystery Metal Frame
-        self.mystery_metal_frame = ttk.Frame(self.root)
+        self.mystery_metal_frame = ttk.Frame(self.scrollable_frame)
         self.mystery_metal_frame.grid(row=10, column=0, columnspan=4, pady=5, sticky="w")
 
         tk.Label(self.mystery_metal_frame, text="Thickness (nm):").grid(row=0, column=0, padx=5, pady=5)
@@ -238,7 +277,7 @@ class LayerConfig:
         self.wp_var.trace_add("write", self.update_mystery_metal_params)
 
         # Standard Metal Frame
-        self.standard_metal_frame = ttk.Frame(self.root)
+        self.standard_metal_frame = ttk.Frame(self.scrollable_frame)
         self.standard_metal_frame.grid(row=11, column=0, columnspan=4, pady=5, sticky="w")
 
         tk.Label(
@@ -412,6 +451,16 @@ class LayerConfig:
         self.metal_layers.clear()
         self.metal_layer_list.delete(0, tk.END)
         # save_settings(self.settings)
+        
+    def setup_incidence_inputs(self):
+        tk.Label(self.scrollable_frame, text="Incidence Angle (degrees):").grid(row=18, column=0)
+        self.angle_entry = tk.Entry(self.scrollable_frame)
+        self.angle_entry.grid(row=18, column=1, columnspan=2)
+        self.angle_entry.insert(0, "0")
+        
+        tk.Label(self.scrollable_frame, text="Polarization:").grid(row=19, column=0)
+        self.polarization_var = tk.StringVar(value="s")
+        ttk.Combobox(self.scrollable_frame, textvariable=self.polarization_var, values=["s", "p"]).grid(row=19, column=1, columnspan=2)
 
     def get_layers(self):
         # Generate the substrate layer dynamically

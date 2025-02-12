@@ -11,7 +11,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class PlotReflectance:
 
-    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, substrate_thickness=None, light_direction=None, right_frame=None):
+    def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, substrate_thickness=None, light_direction=None, right_frame=None, metal_thickness=None):
 
         self.dbr_stack = dbr_stack
         self.metal_layers = metal_layers
@@ -19,6 +19,7 @@ class PlotReflectance:
         self.substrate_thickness = substrate_thickness
         self.light_direction = light_direction
         self.right_frame = right_frame  # Store right_frame reference
+        self.metal_thickness=metal_thickness
 
     def plot_raw_data(self, raw_data, ax, canvas): 
         """Plot raw reflectance data from a CSV file or DataFrame."""
@@ -168,6 +169,41 @@ class PlotReflectance:
             # Plot semi-infinite reflectance
             ax.plot(wavelength_microns, R0, label='Reflectance (Semi-Infinite Substrate)', color='blue')
             ax.plot(wavelength_microns, Abs1, label='Absorption (Semi-Infinite Substrate)', color='green')
+
+        canvas.draw()
+
+    def plot_electric_field_decay(self, ax2, canvas):
+        """
+        Plot the electric field amplitude decay vs. depth in the substrate.
+        Uses the predefined canvas and ax2 parameters.
+        """
+        # Ensure substrate thickness is valid
+        if self.substrate_thickness is None or self.substrate_thickness == 0:
+            raise ValueError("Substrate thickness must be a positive value.")
+    
+        # Convert thickness values to floats if needed
+        try:
+            total_thickness = float(self.substrate_thickness)  # Ensure it's a float
+        except ValueError:
+            raise ValueError("Substrate thickness must be a numeric value.")
+    
+        if self.metal_thickness is not None:
+            try:
+                total_thickness += float(self.metal_thickness)  # Convert and add metal thickness
+            except ValueError:
+                raise ValueError("Metal thickness must be a numeric value if provided.")
+    
+        # Define depth range (from surface to total thickness)
+        depth_microns = np.linspace(0, total_thickness / 1000, 500)
+        
+        # Compute decay profile using an exponential function
+        absorption_coefficient = 7.6 * (4.4 ** (0.3 * 3 - 2.8)) + 1.2  # Approximate value at 3 µm
+        electric_field_amplitude = np.exp(-absorption_coefficient * depth_microns)
+        ax2.plot(depth_microns, electric_field_amplitude, label='Electric Field Amplitude', color='purple')
+        ax2.set_xlabel('Depth in GaSb (µm)')
+        ax2.set_ylabel('Electric Field Amplitude')
+        ax2.set_title('Electric Field Decay in Substrate')
+        ax2.legend()
 
         canvas.draw()
 
