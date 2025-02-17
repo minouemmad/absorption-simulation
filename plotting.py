@@ -39,7 +39,6 @@ class PlotReflectance:
     
         # Drop rows with NaN values
         raw_data = raw_data.dropna(subset=['wavelength', 'reflectance'])
-    
         # Filter the data to include only the range of interest (e.g., 2.5 to 12 µm)
         min_wavelength = max(2.5, raw_data['wavelength'].min())
         max_wavelength = min(12, raw_data['wavelength'].max())
@@ -71,7 +70,7 @@ class PlotReflectance:
         dbr_stack = self.dbr_stack  # Example: [[100.0, 'Constant', 'GaSb_ln'], [100.0, 'Constant', 'AlAsSb_ln']]
         metal_layers = self.metal_layers
         substrate_material = self.substrate_layer  # Example: [[nan, 'Constant', 'GaSb_ln']]
-        substrate_thickness = self.substrate_thickness
+        substrate_thickness = float(self.substrate_thickness)
 
         nlamb = 3500
         x = np.linspace(2.5, 12, nlamb) * 1000  # array of wavelengths (in nanometers), consisting of nlamb = 3500 points

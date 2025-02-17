@@ -40,7 +40,7 @@ class LayerStackApp:
         # Frames for Plots
         self.right_frame = tk.Frame(self.layer_config.scrollable_frame)
         self.right_frame.grid(row=1, column=11, rowspan=10, sticky="nsew")
-        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'hspace': 0.5})
+        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(8, 8), gridspec_kw={'hspace': 0.5})
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.right_frame)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
