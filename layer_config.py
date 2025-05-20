@@ -600,30 +600,66 @@ class LayerConfig:
         ttk.Combobox(self.scrollable_frame, textvariable=self.polarization_var, values=["s", "p"]).grid(row=19, column=1, columnspan=2)
 
     def get_layers(self):
-        # Generate the substrate layer dynamically
-        substrate_material = (
-            "GaSb_ln" if self.substrate_var.get() == "GaSb"
-            else "GaAs_ln" if self.substrate_var.get() == "GaAs"
-            else [1.0, 0.0] if self.substrate_var.get() == "Air"
-            else float('nan')  # Fallback if none of the conditions match
-        )
-
-        # Check if the substrate is finite
-        substrate_thickness = self.substrate_thickness.get() if self.is_finite_substrate.get() else float('nan')
-
-        # Create the substrate layer with the correct thickness
-        substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
-
-        # Dynamically generate the dbr_stack
-        dbr_period = self.settings["dbr_period"]
-        dbr_stack = []
-
-        for _ in range(dbr_period):
-            for layer in self.dbr_layers:
-                if layer[2] == "GaSb_ln":
-                    dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
-                elif layer[2] == "AlAsSb_ln":
-                    dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
+        if self.manual_layer_var.get():
+            # Process manual layers
+            manual_layers = []
+            for layer in self.manual_layers:
+                thickness = float(layer[1].get())  # Get thickness from entry
+                materials = []
+                # Get all material inputs from this layer
+                for child in layer[2].winfo_children():
+                    if isinstance(child, ttk.Combobox):
+                        material = child.get()
+                    elif isinstance(child, tk.Entry):
+                        composition = float(child.get())
+                        materials.append((material, composition))
+                
+                # Create layer structure
+                if len(materials) == 1 and materials[0][1] == 100:
+                    # Single material, 100% composition
+                    if materials[0][0] in ["GaSb", "AlAsSb"]:
+                        manual_layers.append([thickness, "Constant", f"{materials[0][0]}_ln"])
+                    elif materials[0][0] in ["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"]:
+                        manual_layers.append([thickness, "Lorentz-Drude", [materials[0][0], 0, 0, 0, 0, 0, 0]])
+                    else:
+                        manual_layers.append([thickness, "Constant", [1.0, 0.0]])
                 else:
-                    dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
-        return dbr_stack, self.metal_layers, substrate_layer
+                    # Mixed composition - handle appropriately
+                    manual_layers.append([thickness, "Mixed", materials])
+            
+            substrate_material = (
+                "GaSb_ln" if self.substrate_var.get() == "GaSb"
+                else "GaAs_ln" if self.substrate_var.get() == "GaAs"
+                else [1.0, 0.0] if self.substrate_var.get() == "Air"
+                else float('nan')
+            )
+            
+            substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
+            substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
+            
+            return [], manual_layers, substrate_layer
+        else:
+            # Original processing for predefined layers
+            substrate_material = (
+                "GaSb_ln" if self.substrate_var.get() == "GaSb"
+                else "GaAs_ln" if self.substrate_var.get() == "GaAs"
+                else [1.0, 0.0] if self.substrate_var.get() == "Air"
+                else float('nan')
+            )
+            
+            substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
+            substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
+            
+            dbr_period = int(self.dbr_period_entry.get())
+            dbr_stack = []
+            
+            for _ in range(dbr_period):
+                for layer in self.dbr_layers:
+                    if layer[2] == "GaSb_ln":
+                        dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
+                    elif layer[2] == "AlAsSb_ln":
+                        dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
+                    else:
+                        dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
+            
+            return dbr_stack, self.metal_layers, substrate_layer
