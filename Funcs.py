@@ -131,3 +131,19 @@ def calc_rsrpTsTp(incang,layers,x):
         rp[ix]=(N0p[ix]*Bp-Cp)/(N0p[ix]*Bp+Cp)
         Tp[ix]=4*N0p[ix]*real(Nmp[ix])/(abs(N0p[ix]*Bp+Cp))**2
     return [rs,rp,Ts,Tp]
+
+def compute_electric_field_profile(angle_rad, layer_structure, wavelengths):
+    """
+    Calculate electric field intensity |E(z)|^2 profile across a multilayer stack.
+    angle_rad: scalar float angle in radians.
+    layer_structure: list of layers.
+    wavelengths: array of wavelengths in nm.
+
+    Returns:
+        z_positions: depth values in microns
+        E2_profile: corresponding electric field intensity |E(z)|^2
+    """
+    # (Dummy template - you must replace this with actual EM field calculations.)
+    z_positions = np.linspace(0, 10, 1000)  # e.g., 0 to 10 µm depth
+    E2_profile = np.abs(np.sin(2 * np.pi * z_positions / 1.5))**2  # dummy sinusoidal profile
+    return z_positions, E2_profile
