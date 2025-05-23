@@ -21,6 +21,109 @@ class PlotReflectance:
         self.right_frame = right_frame  # Store right_frame reference
         self.metal_thickness=metal_thickness
 
+
+        self.current_plot = None  # To store the current plot state
+        
+        # Unknown metal parameters
+        self.unknown_metal_params = {
+            'thickness': 0,
+            'f0': 0,
+            'gamma0': 0,
+            'wp': 0
+        }
+    def update_unknown_metal_params(self, thickness, f0, gamma0, wp):
+        """Update the unknown metal parameters and refresh plot if needed"""
+        self.unknown_metal_params = {
+            'thickness': float(thickness),
+            'f0': float(f0),
+            'gamma0': float(gamma0),
+            'wp': float(wp)
+        }
+        
+        # Update the metal layers with the new unknown metal layer
+        self.metal_layers = [
+            [self.unknown_metal_params['thickness'], 
+            "Drude", 
+            [
+                self.unknown_metal_params['f0'],
+                self.unknown_metal_params['wp'],
+                self.unknown_metal_params['gamma0']
+            ]
+        ]]
+
+    def plot_unknown_metal_response(self, angle, polarization, ax, canvas):
+        """Specialized plotting for unknown metal with real-time updates"""
+        if not all(self.unknown_metal_params.values()):
+            return  # Don't plot if parameters aren't set
+            
+        # Clear previous plot
+        ax.clear()
+        
+        # Set up the layer structure with unknown metal
+        substrate_material = self.substrate_layer
+        if isinstance(substrate_material, list) and len(substrate_material) > 0:
+            if substrate_material[0][2] == "GaSb_ln":
+                substrate_material[0][2] = [3.816, 0.0]
+            elif substrate_material[0][2] == "GaAs_ln":
+                substrate_material[0][2] = [1, 0]
+            else:
+                substrate_material[0][2] = [1.0, 0.0]
+        
+        Ls_structure = (
+            [[np.nan, "Constant", [1.0, 0.0]]] +
+            self.metal_layers +
+            (self.dbr_stack if self.dbr_stack else []) +
+            substrate_material
+        )
+        
+        if not self.light_direction:
+            Ls_structure = Ls_structure[::-1]
+        
+        # Calculate reflectance
+        nlamb = 3500
+        x = np.linspace(2.5, 12, nlamb) * 1000
+        wavelength_microns = x / 1000
+        incang = angle * np.pi / 180 * np.ones(x.size)
+        
+        rs, rp, Ts, Tp = MF.calc_rsrpTsTp(incang, Ls_structure, x)
+        
+        # Handle polarization
+        if polarization == "s":
+            R0 = (abs(rs))**2
+            T0 = np.real(Ts)
+            Abs1 = 1.0 - R0 - T0
+        elif polarization == "p":
+            R0 = (abs(rp))**2
+            T0 = np.real(Tp)
+            Abs1 = 1.0 - R0 - T0
+        else:  # "both"
+            R0 = 0.5 * ((abs(rs))**2 + (abs(rp))**2)
+            Abs1 = 1 - R0 - (0.5 * (np.real(Ts) + np.real(Tp)))
+        
+        # Plot results
+        ax.plot(wavelength_microns, R0, label='Reflectance', color='blue')
+        ax.plot(wavelength_microns, Abs1, label='Absorption', color='red')
+        ax.legend()
+        canvas.draw()
+        
+        # Store current plot state
+        self.current_plot = {
+            'angle': angle,
+            'polarization': polarization,
+            'ax': ax,
+            'canvas': canvas
+        }
+
+    def update_unknown_metal_plot(self):
+        """Update the plot with current unknown metal parameters"""
+        if self.current_plot:
+            self.plot_unknown_metal_response(
+                self.current_plot['angle'],
+                self.current_plot['polarization'],
+                self.current_plot['ax'],
+                self.current_plot['canvas']
+            )
+
     def plot_raw_data(self, raw_data, ax, canvas): 
         """Plot raw reflectance data from a CSV file or DataFrame."""
         # Load data from a file or ensure it's a DataFrame

@@ -5,10 +5,11 @@ from utils import *
 
 class LayerConfig:
     
-    def __init__(self, root, settings):
+    def __init__(self, root, settings, plotter=None):
         self.root = root
         self.root.title("Layer Configuration")
-        
+        self.plotter = plotter  # Store the plotter reference
+
         # Set window size to fit the screen (webpage-like size)
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()  # Adjust for taskbar/UI elements
@@ -364,19 +365,19 @@ class LayerConfig:
             font=("Helvetica Neue", 14, "bold"), 
             fg="#4A90E2", pady=10).grid(row=0, column=0, columnspan=3, sticky="w")
 
-        # Mystery Metal toggle
-        tk.Label(self.metal_frame, text="Use Mystery Metal:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.mystery_metal_var = tk.BooleanVar(value=False)
-        self.mystery_metal_checkbox = tk.Checkbutton(self.metal_frame, variable=self.mystery_metal_var, command=self.toggle_mystery_metal)
-        self.mystery_metal_checkbox.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        # Unknown Metal toggle
+        tk.Label(self.metal_frame, text="Use Unknown Metal:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.unknown_metal_var = tk.BooleanVar(value=False)
+        self.unknown_metal_checkbox = tk.Checkbutton(self.metal_frame, variable=self.unknown_metal_var, command=self.toggle_unknown_metal)
+        self.unknown_metal_checkbox.grid(row=1, column=1, padx=5, pady=5, sticky="w")
 
-        # Mystery Metal Frame
-        self.mystery_metal_frame = ttk.Frame(self.metal_frame)
-        self.mystery_metal_frame.grid(row=2, column=0, columnspan=4, pady=5, sticky="w")
+        # Unknown Metal Frame
+        self.unknown_metal_frame = ttk.Frame(self.metal_frame)
+        self.unknown_metal_frame.grid(row=2, column=0, columnspan=4, pady=5, sticky="w")
 
-        tk.Label(self.mystery_metal_frame, text="Thickness (nm):").grid(row=0, column=0, padx=5, pady=5)
-        self.mystery_thickness_entry = tk.Entry(self.mystery_metal_frame, width=10)
-        self.mystery_thickness_entry.grid(row=0, column=1, padx=5, pady=5)
+        tk.Label(self.unknown_metal_frame, text="Thickness (nm):").grid(row=0, column=0, padx=5, pady=5)
+        self.unknown_thickness_entry = tk.Entry(self.unknown_metal_frame, width=10)
+        self.unknown_thickness_entry.grid(row=0, column=1, padx=5, pady=5)
 
         # Drude parameters
         self.f0_var = tk.StringVar(value="0")
@@ -384,34 +385,30 @@ class LayerConfig:
         self.wp_var = tk.StringVar(value="0")
 
         # f₀ parameter
-        tk.Label(self.mystery_metal_frame, text="f₀:").grid(row=1, column=0, padx=5, pady=5)
-        self.mystery_f0_entry = tk.Entry(self.mystery_metal_frame, textvariable=self.f0_var, width=10)
-        self.mystery_f0_entry.grid(row=1, column=1, padx=5, pady=5)
-        f0_slider = tk.Scale(self.mystery_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
-                             variable=self.f0_var)
+        tk.Label(self.unknown_metal_frame, text="f₀:").grid(row=1, column=0, padx=5, pady=5)
+        self.unknown_f0_entry = tk.Entry(self.unknown_metal_frame, textvariable=self.f0_var, width=10)
+        self.unknown_f0_entry.grid(row=1, column=1, padx=5, pady=5)
+        f0_slider = tk.Scale(self.unknown_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
+                            variable=self.f0_var, command=lambda _: self.update_unknown_metal_display())
         f0_slider.grid(row=1, column=2, padx=5, pady=5)
 
         # Γ₀ parameter
-        tk.Label(self.mystery_metal_frame, text="Γ₀:").grid(row=2, column=0, padx=5, pady=5)
-        self.mystery_gamma0_entry = tk.Entry(self.mystery_metal_frame, textvariable=self.gamma0_var, width=10)
-        self.mystery_gamma0_entry.grid(row=2, column=1, padx=5, pady=5)
-        gamma0_slider = tk.Scale(self.mystery_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
-                                 variable=self.gamma0_var)
+        tk.Label(self.unknown_metal_frame, text="Γ₀:").grid(row=2, column=0, padx=5, pady=5)
+        self.unknown_gamma0_entry = tk.Entry(self.unknown_metal_frame, textvariable=self.gamma0_var, width=10)
+        self.unknown_gamma0_entry.grid(row=2, column=1, padx=5, pady=5)
+        gamma0_slider = tk.Scale(self.unknown_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
+                                variable=self.gamma0_var, command=lambda _: self.update_unknown_metal_display())
         gamma0_slider.grid(row=2, column=2, padx=5, pady=5)
 
         # ωₚ parameter
-        tk.Label(self.mystery_metal_frame, text="ωₚ:").grid(row=3, column=0, padx=5, pady=5)
-        self.mystery_wp_entry = tk.Entry(self.mystery_metal_frame, textvariable=self.wp_var, width=10)
-        self.mystery_wp_entry.grid(row=3, column=1, padx=5, pady=5)
-        wp_slider = tk.Scale(self.mystery_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
-                             variable=self.wp_var)
+        tk.Label(self.unknown_metal_frame, text="ωₚ:").grid(row=3, column=0, padx=5, pady=5)
+        self.unknown_wp_entry = tk.Entry(self.unknown_metal_frame, textvariable=self.wp_var, width=10)
+        self.unknown_wp_entry.grid(row=3, column=1, padx=5, pady=5)
+        wp_slider = tk.Scale(self.unknown_metal_frame, from_=0, to=20, resolution=0.1, orient="horizontal", 
+                            variable=self.wp_var, command=lambda _: self.update_unknown_metal_display())
         wp_slider.grid(row=3, column=2, padx=5, pady=5)
 
-        tk.Button(self.mystery_metal_frame, text="Update Configuration", command=self.update_mystery_metal_params).grid(row=9, column=3, padx=5, pady=5, sticky="w")
-
-        self.f0_var.trace_add("write", self.update_mystery_metal_params)
-        self.gamma0_var.trace_add("write", self.update_mystery_metal_params)
-        self.wp_var.trace_add("write", self.update_mystery_metal_params)
+        tk.Button(self.unknown_metal_frame, text="Update Configuration", command=self.update_unknown_metal_params).grid(row=9, column=3, padx=5, pady=5, sticky="w")
 
         # Standard Metal Frame
         self.standard_metal_frame = ttk.Frame(self.metal_frame)
@@ -476,34 +473,56 @@ class LayerConfig:
 
         self.metal_layer_list = tk.Listbox(self.standard_metal_frame, height=5, width=60)
         self.metal_layer_list.grid(row=9, column=0, columnspan=4, pady=5)
-        self.toggle_mystery_metal()
+        self.toggle_unknown_metal()
 
-    def toggle_mystery_metal(self):
-        if self.mystery_metal_var.get():
-            print("Mystery Metal selected.")
+    def update_unknown_metal_display(self):
+        """Update both parameters and plot for unknown metal"""
+        try:
+            thickness = float(self.unknown_thickness_entry.get())
+            f0 = float(self.f0_var.get())
+            gamma0 = float(self.gamma0_var.get())
+            wp = float(self.wp_var.get())
+            
+            # Update plotter parameters
+            self.plotter.update_unknown_metal_params(thickness, f0, gamma0, wp)
+            
+            # Trigger plot update
+            if hasattr(self, 'current_angle') and hasattr(self, 'current_polarization'):
+                self.plotter.plot_unknown_metal_response(
+                    self.current_angle,
+                    self.current_polarization,
+                    self.ax,
+                    self.canvas
+                )
+        except ValueError:
+            pass  # Ignore during slider movement
+
+    def toggle_unknown_metal(self):
+        if self.unknown_metal_var.get():
+            print("Unkown Metal selected.")
             # Hide or disable standard metal configurations
             self.standard_metal_frame.grid_forget()
-            self.mystery_metal_frame.grid(row=14, column=0, columnspan=4, padx=5, pady=5, sticky="w")
+            self.unknown_metal_frame.grid(row=14, column=0, columnspan=4, padx=5, pady=5, sticky="w")
             
-            thickness = float(self.mystery_thickness_entry.get())
-            f0 = float(self.mystery_f0_entry.get())
-            gamma0 = float(self.mystery_gamma0_entry.get())
-            wp = float(self.mystery_wp_entry.get())
+            thickness = float(self.unknown_thickness_entry.get())
+            f0 = float(self.unknown_f0_entry.get())
+            gamma0 = float(self.unknown_gamma0_entry.get())
+            wp = float(self.unknown_wp_entry.get())
 
             layer = [thickness, "Drude", [f0, wp, gamma0]]
             print(f"layer: {layer}")
             self.metal_layers.append(layer)
 
         else:
-            # Show standard options and hide mystery metal options
+            # Show standard options and hide unkown metal options
             
-            self.mystery_metal_frame.grid_forget()
+            self.unknown_metal_frame.grid_forget()
             self.standard_metal_frame.grid(row=10, column=0, columnspan=4, pady=5)
 
-    def update_mystery_metal_params(self, *args):
-        """Update mystery metal parameters from GUI inputs."""
+    def update_unknown_metal_params(self, *args):
+        """Update unknown metal parameters from GUI inputs."""
         # Retrieve values from GUI
-        thickness = float(self.mystery_thickness_entry.get())
+        thickness = float(self.unknown_thickness_entry.get())
         f0 = float(self.f0_var.get())
         gamma0 = float(self.gamma0_var.get())
         wp = float(self.wp_var.get())
@@ -599,60 +618,92 @@ class LayerConfig:
         self.polarization_var = tk.StringVar(value="s")
         ttk.Combobox(self.scrollable_frame, textvariable=self.polarization_var, values=["s", "p"]).grid(row=19, column=1, columnspan=2)
 
-    def get_layers(self):
+    def get_layers(self): 
         if self.manual_layer_var.get():
             # Process manual layers
             manual_layers = []
             for layer in self.manual_layers:
-                thickness = float(layer[1].get())  # Get thickness from entry
+                try:
+                    thickness = float(layer[1].get())  # Get thickness from entry
+                except ValueError:
+                    print(f"Warning: Invalid thickness entry '{layer[1].get()}'. Skipping this layer.")
+                    continue  # Skip this layer if thickness is invalid
+
                 materials = []
-                # Get all material inputs from this layer
+                material_entries = []
+
+                current_material = None
                 for child in layer[2].winfo_children():
                     if isinstance(child, ttk.Combobox):
-                        material = child.get()
+                        current_material = child.get()
                     elif isinstance(child, tk.Entry):
-                        composition = float(child.get())
-                        materials.append((material, composition))
-                
-                # Create layer structure
-                if len(materials) == 1 and materials[0][1] == 100:
-                    # Single material, 100% composition
-                    if materials[0][0] in ["GaSb", "AlAsSb"]:
-                        manual_layers.append([thickness, "Constant", f"{materials[0][0]}_ln"])
-                    elif materials[0][0] in ["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"]:
-                        manual_layers.append([thickness, "Lorentz-Drude", [materials[0][0], 0, 0, 0, 0, 0, 0]])
+                        try:
+                            composition = float(child.get())
+                            if current_material:
+                                material_entries.append((current_material, composition))
+                        except ValueError:
+                            print(f"Warning: Skipping invalid composition entry: '{child.get()}'")
+
+                # Calculate total composition percentage
+                total_percent = sum(comp for _, comp in material_entries)
+
+                if total_percent == 0:
+                    print("Warning: Total composition is 0%. Skipping this layer.")
+                    continue
+
+                # Normalize if total isn't 100%
+                if total_percent != 100:
+                    material_entries = [(mat, (comp / total_percent) * 100) for mat, comp in material_entries]
+
+                # Create sublayers based on composition
+                for material, percent in material_entries:
+                    sublayer_thickness = thickness * (percent / 100)
+
+                    if material in ["GaSb", "AlAsSb"]:
+                        manual_layers.append([sublayer_thickness, "Constant", f"{material}_ln"])
+                    elif material in ["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"]:
+                        manual_layers.append([sublayer_thickness, "Lorentz-Drude", [material, 0, 0, 0, 0, 0, 0]])
                     else:
-                        manual_layers.append([thickness, "Constant", [1.0, 0.0]])
-                else:
-                    # Mixed composition - handle appropriately
-                    manual_layers.append([thickness, "Mixed", materials])
-            
+                        manual_layers.append([sublayer_thickness, "Constant", [1.0, 0.0]])
+
+            # Substrate handling
             substrate_material = (
                 "GaSb_ln" if self.substrate_var.get() == "GaSb"
                 else "GaAs_ln" if self.substrate_var.get() == "GaAs"
                 else [1.0, 0.0] if self.substrate_var.get() == "Air"
                 else float('nan')
             )
-            
-            substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
+            try:
+                substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
+            except ValueError:
+                print(f"Warning: Invalid substrate thickness entry: '{self.substrate_thickness.get()}'. Using NaN.")
+                substrate_thickness = float('nan')
             substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
-            
+
             return [], manual_layers, substrate_layer
+
         else:
-            # Original processing for predefined layers
+            # Predefined DBR layer setup
             substrate_material = (
                 "GaSb_ln" if self.substrate_var.get() == "GaSb"
                 else "GaAs_ln" if self.substrate_var.get() == "GaAs"
                 else [1.0, 0.0] if self.substrate_var.get() == "Air"
                 else float('nan')
             )
-            
-            substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
+            try:
+                substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
+            except ValueError:
+                print(f"Warning: Invalid substrate thickness entry: '{self.substrate_thickness.get()}'. Using NaN.")
+                substrate_thickness = float('nan')
             substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
-            
-            dbr_period = int(self.dbr_period_entry.get())
+
+            try:
+                dbr_period = int(self.dbr_period_entry.get())
+            except ValueError:
+                print(f"Warning: Invalid DBR period entry: '{self.dbr_period_entry.get()}'. Using 0.")
+                dbr_period = 0
+
             dbr_stack = []
-            
             for _ in range(dbr_period):
                 for layer in self.dbr_layers:
                     if layer[2] == "GaSb_ln":
@@ -661,5 +712,6 @@ class LayerConfig:
                         dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
                     else:
                         dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
-            
+
             return dbr_stack, self.metal_layers, substrate_layer
+
