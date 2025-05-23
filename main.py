@@ -26,7 +26,7 @@ class LayerStackApp:
         self.layer_config.on_refresh_electric_field = self.refresh_electric_field
         
         # Initialize plotter
-        self.plotter = PlotReflectance(right_frame=self.layer_config.right_panel)
+        self.plotter = PlotReflectance(right_frame=self.layer_config.right_frame)
         
         # Link plotter to layer config for real-time updates
         self.layer_config.plotter = self.plotter

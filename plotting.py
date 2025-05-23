@@ -1,4 +1,3 @@
-# plotting.py - Updated with real-time Drude updates and better plotting
 import numpy as np
 import pandas as pd
 import tkinter as tk
@@ -170,46 +169,56 @@ class PlotReflectance:
         }
 
     def plot_raw_data(self, raw_data, ax, canvas): 
-        """Plot raw reflectance data from a CSV file or DataFrame."""
+        """Plot raw reflectance data with a different color"""
+        # Clear any existing raw data plot
+        if self.raw_data_line:
+            self.raw_data_line.remove()
+            
         # Load data from a file or ensure it's a DataFrame
-        if isinstance(raw_data, str):  # Assuming raw_data is a file path
+        if isinstance(raw_data, str):
             try:
                 raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"],
-                                       delimiter=",", engine="python")
+                                     delimiter=",", engine="python")
             except Exception as e:
                 raise ValueError(f"Failed to load file: {e}")
         elif not isinstance(raw_data, pd.DataFrame):
             raise TypeError("raw_data should be a pandas DataFrame or a CSV file path.")
     
-        # Ensure 'wavelength' and 'reflectance' columns are numeric
+        # Process data
         raw_data['wavelength'] = pd.to_numeric(raw_data['wavelength'], errors='coerce')
         raw_data['reflectance'] = pd.to_numeric(raw_data['reflectance'], errors='coerce')
-    
-        # Drop rows with NaN values
         raw_data = raw_data.dropna(subset=['wavelength', 'reflectance'])
-        # Filter the data to include only the range of interest (e.g., 2.5 to 12 µm)
+        
+        # Filter to our range of interest
         min_wavelength = max(2.5, raw_data['wavelength'].min())
         max_wavelength = min(12, raw_data['wavelength'].max())
         filtered_data = raw_data[(raw_data['wavelength'] >= min_wavelength) &
-                                 (raw_data['wavelength'] <= max_wavelength)]
+                               (raw_data['wavelength'] <= max_wavelength)]
     
         if filtered_data.empty:
             raise ValueError("No data points found in the specified wavelength range (2.5–12 µm).")
     
-        # Handle duplicates: Group by wavelength and average reflectance
+        # Handle duplicates and smooth
         filtered_data = filtered_data.groupby("wavelength", as_index=False)["reflectance"].mean()
-    
-        # Smooth curve using dense interpolation
         smooth_wavelengths = np.linspace(filtered_data['wavelength'].min(),
-                                          filtered_data['wavelength'].max(), 500)
+                                        filtered_data['wavelength'].max(), 500)
         smooth_reflectance = make_interp_spline(
-            filtered_data['wavelength'], filtered_data['reflectance'], k=3  # Cubic spline
+            filtered_data['wavelength'], filtered_data['reflectance'], k=3
         )(smooth_wavelengths)
     
-        ax.plot(
-            smooth_wavelengths, smooth_reflectance, label="Smoothed Curve", color="blue", linewidth=1  # Thinner line
+        # Plot with a distinct color (green in this case)
+        self.raw_data_line, = ax.plot(
+            smooth_wavelengths, smooth_reflectance, 
+            label="Raw Data", 
+            color="green",  # Changed from blue to green
+            linewidth=1.5,
+            linestyle="--"  # Added dashed line for better distinction
         )
-
+        
+        # Update legend
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles, labels)
+        
         canvas.draw()
 
     def plot_stack(self, angle, polarization, ax, canvas):
@@ -350,5 +359,3 @@ class PlotReflectance:
 
         # Redraw canvas
         canvas.draw()
-
-

@@ -1,8 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from utils import *
+import time  
+from tkinter import ttk, messagebox
 
 class LayerConfig:
     
@@ -14,50 +16,49 @@ class LayerConfig:
         self.dbr_layers = settings["dbr_layers"]
         self.metal_layers = settings["metal_layers"]
         
-        # Modern styling
+        # Modern styling with better colors
         self.style = tb.Style("minty")
         self.style.configure("TLabel", font=('Helvetica', 10))
-        self.style.configure("TButton", font=('Helvetica', 10))
-        self.style.configure("TEntry", font=('Helvetica', 10))
+        self.style.configure("TButton", font=('Helvetica', 10), padding=5)
+        self.style.configure("TEntry", font=('Helvetica', 10), padding=5)
+        self.style.configure("TCombobox", padding=5)
         
-        # Configure root window
+        # Configure root window to fill screen
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        root.geometry(f"{int(screen_width*0.9)}x{int(screen_height*0.8)}")
+        root.geometry(f"{int(screen_width*0.95)}x{int(screen_height*0.9)}")
         root.resizable(True, True)
         
-        # Create main container with horizontal and vertical scrollbars
-        self.container = ttk.Frame(root)
-        self.container.pack(fill=BOTH, expand=True)
+        # Main container with improved scrolling
+        self.main_container = tb.Frame(root)
+        self.main_container.pack(fill=BOTH, expand=True)
         
-        # Canvas with both scrollbars
-        self.canvas = tk.Canvas(self.container)
-        self.v_scroll = ttk.Scrollbar(self.container, orient=VERTICAL, command=self.canvas.yview)
-        self.h_scroll = ttk.Scrollbar(self.container, orient=HORIZONTAL, command=self.canvas.xview)
-        self.canvas.configure(yscrollcommand=self.v_scroll.set, xscrollcommand=self.h_scroll.set)
+        # Create paned window for left/right split
+        self.paned = tb.PanedWindow(self.main_container, orient=HORIZONTAL)
+        self.paned.pack(fill=BOTH, expand=True)
         
-        self.v_scroll.pack(side=RIGHT, fill=Y)
-        self.h_scroll.pack(side=BOTTOM, fill=X)
-        self.canvas.pack(side=LEFT, fill=BOTH, expand=True)
+        # Left panel (controls) with scrollbar
+        self.left_container = tb.Frame(self.paned)
+        self.left_canvas = tk.Canvas(self.left_container)
+        self.left_scroll = tb.Scrollbar(self.left_container, orient=VERTICAL, command=self.left_canvas.yview)
+        self.left_canvas.configure(yscrollcommand=self.left_scroll.set)
         
-        # Scrollable frame
-        self.scrollable_frame = ttk.Frame(self.canvas)
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.left_scroll.pack(side=RIGHT, fill=Y)
+        self.left_canvas.pack(side=LEFT, fill=BOTH, expand=True)
         
-        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(
-            scrollregion=self.canvas.bbox("all")))
+        self.left_frame = tb.Frame(self.left_canvas)
+        self.left_canvas.create_window((0, 0), window=self.left_frame, anchor="nw")
         
-        # Bind mousewheel for both axes
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        self.canvas.bind_all("<Shift-MouseWheel>", self._on_shift_mousewheel)
+        self.left_frame.bind("<Configure>", lambda e: self.left_canvas.configure(
+            scrollregion=self.left_canvas.bbox("all")))
         
-        # Left panel for controls
-        self.left_panel = ttk.Frame(self.container)
-        self.left_panel.pack(side=LEFT, fill=BOTH, expand=True, padx=10, pady=10)
+        # Right panel (plots)
+        self.right_frame = tb.Frame(self.paned)
+        self.paned.add(self.left_container)
+        self.paned.add(self.right_frame)
         
-        # Right panel for plots
-        self.right_panel = ttk.Frame(self.container)
-        self.right_panel.pack(side=RIGHT, fill=BOTH, expand=True, padx=10, pady=10)
+        # Bind mousewheel for scrolling
+        self.left_canvas.bind_all("<MouseWheel>", lambda e: self.left_canvas.yview_scroll(-1*(e.delta//120), "units"))
         
         # Initialize UI sections
         self.setup_gui()
@@ -69,7 +70,6 @@ class LayerConfig:
         self.setup_incidence_inputs()
         self.setup_action_buttons()
 
-
         # Make unknown metal the default option
         self.unknown_metal_var.set(True)
         self.toggle_unknown_metal()
@@ -77,29 +77,18 @@ class LayerConfig:
         # Select standard configuration by default
         self.notebook.select(self.config_tab)
 
-    def _on_mousewheel(self, event):
-        """Vertical scrolling"""
-        if self.canvas.yview()[0] <= 0 and event.delta > 0:
-            return
-        self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
-
-    def _on_shift_mousewheel(self, event):
-        """Horizontal scrolling"""
-        if self.canvas.xview()[0] <= 0 and event.delta > 0:
-            return
-        self.canvas.xview_scroll(-1 * (event.delta // 120), "units")
-
     def setup_gui(self):
-        # Main notebook for tabbed interface
-        self.notebook = ttk.Notebook(self.left_panel)
-        self.notebook.pack(fill=BOTH, expand=True, padx=5, pady=5)
+        # Main notebook for tabbed interface with better styling
+        self.notebook = tb.Notebook(self.left_frame)
+        self.notebook.pack(fill=BOTH, expand=True, padx=10, pady=10)
         
         # Configure grid weights
-        self.scrollable_frame.grid_rowconfigure(0, weight=1)
-        self.scrollable_frame.grid_columnconfigure(0, weight=1)
+        self.left_frame.grid_rowconfigure(0, weight=1)
+        self.left_frame.grid_columnconfigure(0, weight=1)
+
     def setup_action_buttons(self):
         # Button frame
-        btn_frame = ttk.Frame(self.left_panel)
+        btn_frame = ttk.Frame(self.left_frame)
         btn_frame.pack(fill=X, pady=10)
         
         # Upload Button
