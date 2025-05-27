@@ -1,3 +1,4 @@
+#plotting.py
 import numpy as np
 import pandas as pd
 import tkinter as tk
@@ -22,6 +23,9 @@ class PlotReflectance:
         self.right_frame = right_frame
         self.metal_thickness = metal_thickness
 
+        self.raw_data_line = None
+        self.raw_data = None
+        
         self.current_plot = None
 
         
@@ -96,11 +100,14 @@ class PlotReflectance:
             )
 
     def plot_unknown_metal_response(self, angle, polarization, ax, canvas):
-        """Plot reflectance for unknown metal with real-time updates"""
+        """Plot reflectance for unknown metal with progressive rendering"""
         if not all(self.unknown_metal_params.values()):
             return
             
-        ax.clear()
+        # Clear only the reflectance lines, not the entire plot
+        for line in ax.get_lines():
+            if line.get_label() in ['Reflectance', 'Absorption']:
+                line.remove()
         
         # Set up layer structure
         substrate_material = self.substrate_layer
@@ -122,7 +129,50 @@ class PlotReflectance:
         if not self.light_direction:
             Ls_structure = Ls_structure[::-1]
         
-        # Calculate reflectance
+        # Initial coarse calculation (every 10th point)
+        nlamb = 350
+        x_coarse = np.linspace(2.5, 12, nlamb) * 1000
+        wavelength_microns_coarse = x_coarse / 1000
+        incang = angle * np.pi / 180 * np.ones(x_coarse.size)
+        
+        rs, rp, Ts, Tp = MF.calc_rsrpTsTp(incang, Ls_structure, x_coarse)
+        
+        # Handle polarization
+        if polarization == "s":
+            R0_coarse = (abs(rs))**2
+            T0_coarse = np.real(Ts)
+            Abs1_coarse = 1.0 - R0_coarse - T0_coarse
+        elif polarization == "p":
+            R0_coarse = (abs(rp))**2
+            T0_coarse = np.real(Tp)
+            Abs1_coarse = 1.0 - R0_coarse - T0_coarse
+        else:  # "both"
+            R0_coarse = 0.5 * ((abs(rs))**2 + (abs(rp))**2)
+            Abs1_coarse = 1 - R0_coarse - (0.5 * (np.real(Ts) + np.real(Tp)))
+        
+        # Plot coarse results first
+        line_r, = ax.plot(wavelength_microns_coarse, R0_coarse, 
+                        label='Reflectance', color='blue', alpha=0.7)
+        line_a, = ax.plot(wavelength_microns_coarse, Abs1_coarse, 
+                        label='Absorption', color='red', alpha=0.7)
+        ax.legend()
+        canvas.draw_idle()
+        
+        # Then calculate full resolution in background
+        self.root.after(100, lambda: self._finish_high_res_plot(
+            angle, polarization, Ls_structure, ax, canvas
+        ))
+        
+        # Store current plot state
+        self.current_plot = {
+            'angle': angle,
+            'polarization': polarization,
+            'ax': ax,
+            'canvas': canvas
+        }
+
+    def _finish_high_res_plot(self, angle, polarization, Ls_structure, ax, canvas):
+        """Complete the high resolution plot after initial coarse render"""
         nlamb = 3500
         x = np.linspace(2.5, 12, nlamb) * 1000
         wavelength_microns = x / 1000
@@ -143,35 +193,19 @@ class PlotReflectance:
             R0 = 0.5 * ((abs(rs))**2 + (abs(rp))**2)
             Abs1 = 1 - R0 - (0.5 * (np.real(Ts) + np.real(Tp)))
         
-        # Plot results
-        ax.plot(wavelength_microns, R0, label='Reflectance', color='blue')
-        ax.plot(wavelength_microns, Abs1, label='Absorption', color='red')
-        ax.legend()
+        # Update the plot with high resolution data
+        for line in ax.get_lines():
+            if line.get_label() == 'Reflectance':
+                line.set_data(wavelength_microns, R0)
+            elif line.get_label() == 'Absorption':
+                line.set_data(wavelength_microns, Abs1)
         
-        # Reset plot limits and labels
-        ax.set_xticks(np.arange(2, 13, 1))
-        ax.set_yticks(np.linspace(0.0, 1.0, 11))
-        ax.set_xlim(2.5, 12)
-        ax.set_ylim(0.0, 1.0)
-        ax.set_xlabel("Wavelength (μm)")
-        ax.set_ylabel("Reflectance")
-        ax.set_title("Simulated Reflectance")
-        ax.grid(alpha=0.2)
-        
-        canvas.draw()
-        
-        # Store current plot state
-        self.current_plot = {
-            'angle': angle,
-            'polarization': polarization,
-            'ax': ax,
-            'canvas': canvas
-        }
+        canvas.draw_idle()
 
     def plot_raw_data(self, raw_data, ax, canvas): 
         """Plot raw reflectance data with a different color"""
         # Clear any existing raw data plot
-        if self.raw_data_line:
+        if self.raw_data_line is not None:
             self.raw_data_line.remove()
             
         # Load data from a file or ensure it's a DataFrame
@@ -238,7 +272,7 @@ class PlotReflectance:
                     substrate_material[0][2] = [1, 0]
                 else:
                     substrate_material[0][2] = [1.0, 0.0]
-            
+            substrate_thickness = float(self.substrate_thickness)
             # Build layer structure
             Ls_structure = (
                 [[np.nan, "Constant", [1.0, 0.0]]] +
@@ -267,15 +301,47 @@ class PlotReflectance:
                 R0 = (abs(rp))**2
                 T0 = np.real(Tp)
                 Abs1 = 1.0 - R0 - T0
-            else:
-                R0 = 0.5 * ((abs(rs))**2 + (abs(rp))**2)
-                Abs1 = 1 - R0 - (0.5 * (np.real(Ts) + np.real(Tp)))
-            
-            # Plot results
-            ax.plot(wavelength_microns, R0, label='Reflectance', color='blue')
-            ax.plot(wavelength_microns, Abs1, label='Absorption', color='red')
-            ax.legend()
-            
+                
+            if substrate_thickness != 0.0 or substrate_thickness != None:  # Check if finite substrate is selected
+                print("Finite substrate thickness in microns: " + str(substrate_thickness/1000))
+                R_finite = np.zeros_like(R0)
+
+                # in microns
+                substrate_thickness=substrate_thickness/1000
+
+                # Define valid wavelength range (2 µm to 12 µm)
+                valid_range = (wavelength_microns >= 2) & (wavelength_microns <= 12)
+
+                # Initialize alpha with zeros
+                alpha = np.zeros_like(wavelength_microns)
+
+                # Compute alpha(absorption coefficient for GaSb) only in valid range
+                alpha[valid_range] = 7.6 * (4.4 ** (0.3 * wavelength_microns[valid_range] - 2.8)) + 1.2  
+
+                print(alpha)
+                # Precompute exp(-2 * alpha * substrate_thickness) once
+                exp_factor = np.exp(-2 * alpha * substrate_thickness)
+
+                for i in range(1, 11):  # Summation term
+                    term = (0.33 ** (i - 1)) * (R0 ** i) * (exp_factor ** (substrate_thickness*i))
+                    R_finite += term
+
+                    print(f"Iteration {i}, term min: {term.min()}, max: {term.max()}")
+
+                # Final update for reflectance
+                R_finite = 0.33 + (0.67 ** 2) * R_finite
+                Abs1 = 1.0 - R_finite - T0
+
+                ax.plot(wavelength_microns, R_finite, label='Reflectance (Finite Substrate)', color='green')
+                ax.plot(wavelength_microns, Abs1, label='Absorption (Finite Substrate)', color='red')
+
+
+            else:    
+                # Plot results
+                ax.plot(wavelength_microns, R0, label='Reflectance (Semi-Infinite Substrate)', color='blue')
+                ax.plot(wavelength_microns, Abs1, label='Absorption (Semi-Infinite Substrate)', color='red')
+                ax.legend()
+                
             # Reset plot properties
             ax.set_xticks(np.arange(2, 13, 1))
             ax.set_yticks(np.linspace(0.0, 1.0, 11))
@@ -295,7 +361,7 @@ class PlotReflectance:
                 'ax': ax,
                 'canvas': canvas
             }
-            
+                
         except Exception as e:
             print(f"Error in plot_stack: {e}")
             messagebox.showerror("Plot Error", f"Failed to plot reflectance: {str(e)}")
@@ -321,41 +387,69 @@ class PlotReflectance:
 
 
     def plot_electric_field_decay(self, ax, canvas):
-        """
-        Plot the electric field amplitude decay vs. depth in the substrate.
-        Uses the provided Matplotlib Axes object and FigureCanvas to render on a separate canvas.
-        """
-        # Validate substrate thickness
-        if self.substrate_thickness is None or self.substrate_thickness == 0:
-            raise ValueError("Substrate thickness must be a positive value.")
-
         try:
-            total_thickness = float(self.substrate_thickness)
-        except ValueError:
-            raise ValueError("Substrate thickness must be a numeric value.")
-
-        # Add metal thickness if present
-        if self.metal_thickness is not None:
-            try:
-                total_thickness += float(self.metal_thickness)
-            except ValueError:
-                raise ValueError("Metal thickness must be a numeric value if provided.")
-
-        # Define depth in microns
-        depth_microns = np.linspace(0, total_thickness / 1000, 500)
-
-        # Compute electric field amplitude decay
-        absorption_coefficient = 7.6 * (4.4 ** (0.3 * 3 - 2.8)) + 1.2  # Empirical formula at ~3 µm
-        electric_field_amplitude = np.exp(-absorption_coefficient * depth_microns)
-
-        # Clear the existing plot and draw new one
-        ax.clear()
-        ax.plot(depth_microns, electric_field_amplitude, label='Electric Field Amplitude', color='purple')
-        ax.set_xlabel('Depth in GaSb (µm)')
-        ax.set_ylabel('Electric Field Amplitude')
-        ax.set_title('Electric Field Decay in Substrate')
-        ax.grid(True)
-        ax.legend()
-
-        # Redraw canvas
-        canvas.draw()
+            # Use the layers that were already set in the plotter instance
+            total_layers = (self.metal_layers if self.metal_layers else []) + \
+                        (self.dbr_stack if self.dbr_stack else []) + \
+                        (self.substrate_layer if self.substrate_layer else [])
+                
+            if not total_layers:
+                raise ValueError("No layers configured")
+                
+            # Rest of the function remains the same...
+            # Calculate cumulative depth
+            depths = [0]
+            for layer in total_layers:
+                depths.append(depths[-1] + (layer[0] if not np.isnan(layer[0]) else 0))
+                
+            total_thickness = depths[-1]
+            
+            # Create depth array with fine resolution
+            z = np.linspace(0, total_thickness, 5000)  # nm
+            z_microns = z / 1000  # convert to microns
+            
+            # Initialize field
+            E = np.ones_like(z)
+            
+            # Simulate field decay with oscillations
+            current_depth = 0
+            for i, layer in enumerate(total_layers):
+                thickness = layer[0] if not np.isnan(layer[0]) else 0
+                if thickness == 0:
+                    continue
+                    
+                # Get material properties (simplified)
+                n = 3.8 if "GaSb" in str(layer[2]) else \
+                    3.1 if "AlAsSb" in str(layer[2]) else \
+                    0.5 + 10j if layer[1] == "Drude" else 1.0
+                    
+                # Calculate decay and oscillations
+                start_idx = np.searchsorted(z, current_depth)
+                end_idx = np.searchsorted(z, current_depth + thickness)
+                
+                k = 2 * np.pi / (4.0 * 1000)  # wavevector for ~4μm light
+                attenuation = np.exp(-z[start_idx:end_idx] * 0.001)  # arbitrary decay
+                oscillations = np.cos(2 * k * z[start_idx:end_idx])
+                
+                E[start_idx:end_idx] = attenuation * oscillations
+                
+                current_depth += thickness
+                
+            # Plot
+            ax.clear()
+            ax.plot(z_microns, np.abs(E), 'b-', label='|E(z)|')
+            ax.plot(z_microns, np.real(E), 'r--', alpha=0.5, label='Re(E(z))')
+            ax.set_xlabel('Depth from top (μm)')
+            ax.set_ylabel('Electric Field')
+            ax.set_title('Electric Field in Stack')
+            ax.legend()
+            ax.grid(True)
+            
+            # Mark layer boundaries
+            for depth in depths[1:-1]:
+                ax.axvline(depth/1000, color='k', linestyle=':', alpha=0.3)
+                
+            canvas.draw()
+            
+        except Exception as e:
+            messagebox.showerror("Plot Error", f"Failed to plot electric field: {str(e)}")
