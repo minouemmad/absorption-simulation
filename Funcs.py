@@ -3,7 +3,7 @@
 NNN = []
 from numpy import *
 import LD   # import from "Lorentz_Drude_funcs.py"
-
+import numpy as np
 def calc_Nlayer(layers,x,num_lay):
     case = layers[num_lay][1]
     params = layers[num_lay][2]
@@ -72,7 +72,6 @@ def calc_Nlayer(layers,x,num_lay):
         Nlay = nnn - 1j*kap # this creates the complex refractive index for the layer using n and k values, combining them into a single complex number (Nlay)
         
     elif case == 'Drude':
-        print(f"f0: {layers[num_lay][2][0]}, wp: {layers[num_lay][2][1]}, gamma0: {layers[num_lay][2][2]}")
         v2p=[layers[num_lay][2][0],layers[num_lay][2][1],layers[num_lay][2][2]]   # f_o, w_o, G       
         ehbar = 1.519250349719305e+15 # e/hbar where hbar=h/(2*pi) and e=1.6e-19
         twopic = 1.883651567308853e+09  # twopic=2*pi*c where c is speed of light
@@ -82,7 +81,6 @@ def calc_Nlayer(layers,x,num_lay):
             epsilon_D[i] = 1 - (v2p[0] * (v2p[1]*ehbar) ** 2 / (w ** 2 + 1j * (v2p[2]*ehbar) * w))
         epsilon = epsilon_D
         Nlay = sqrt(epsilon)
-        print(f"Drude Nlay: {Nlay}")
         
     elif case == 'File':
         aux=loadtxt(layers[num_lay][2][0]) # N,k data
