@@ -1,9 +1,0 @@
-TODO
-
-1. allow for updated drude parameters to update the graph in real time 
-
-2. take in transmittance and/or reflectance data from user, then plot experimental absorption from that
-
-2. add option to plot electric field distribution inside structure
-
-3. simulate Biphoton Emitter structure; measured reflection; and simulated electric field

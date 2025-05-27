@@ -1,5 +1,6 @@
-# main.py - Updated with better layout and callbacks
+#main.py
 import tkinter as tk
+import pandas as pd
 from tkinter import ttk, filedialog, messagebox
 from layer_config import LayerConfig
 from plotting import PlotReflectance
@@ -30,20 +31,47 @@ class LayerStackApp:
         
         # Link plotter to layer config for real-time updates
         self.layer_config.plotter = self.plotter
-
+        try:
+            img = tk.PhotoImage(file='icon.png')  
+            root.tk.call('wm', 'iconphoto', root._w, img)
+        except:
+            pass
     def upload_raw_data(self):
         file_path = filedialog.askopenfilename(
             title="Select Raw Reflectance Data File",
-            filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
+            filetypes=[("CSV Files", "*.csv"), ("Text Files", "*.txt"), ("All Files", "*.*")]
         )
-        if file_path:
-            try:
-                self.raw_data = load_raw_data(file_path)
-                self.plotter.plot_raw_data(self.raw_data, self.plotter.ax1, self.plotter.canvas)
-                messagebox.showinfo("Success", "Raw reflectance data loaded successfully.")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load file: {e}")
-
+        
+        if not file_path:
+            return
+            
+        try:
+            # Try different delimiters and handle headers
+            for delimiter in [',', '\t', ';', ' ']:
+                try:
+                    df = pd.read_csv(file_path, delimiter=delimiter, header=None, 
+                                    names=['wavelength', 'reflectance'], engine='python')
+                    if len(df.columns) >= 2:
+                        break
+                except:
+                    continue
+                    
+            # Validate data
+            if len(df.columns) < 2:
+                raise ValueError("CSV must contain at least 2 columns (wavelength and reflectance)")
+                
+            self.raw_data = df
+            self.plotter.raw_data = df  # Store in plotter
+            self.layer_config.raw_data = df  # Also store in layer config if needed
+            
+            # Plot the raw data
+            self.plotter.plot_raw_data(df, self.plotter.ax1, self.plotter.canvas)
+            
+        except Exception as e:
+            messagebox.showerror("Upload Error", 
+                f"Failed to load file:\n{str(e)}\n\n"
+                "Please ensure file is a 2-column CSV with wavelength and reflectance.")
+            
     def plot_reflectance(self):
         try:
             angle = float(self.layer_config.angle_entry.get())

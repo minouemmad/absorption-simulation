@@ -1,21 +1,35 @@
+#layer_config.py
 import tkinter as tk
 from tkinter import ttk
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from utils import *
 import time  
+import Funcs as MF
 from tkinter import ttk, messagebox
+import numpy as np
+from scipy.interpolate import RegularGridInterpolator
+import threading  # Add this if not already present
+import pandas as pd  # Add this if not already present
 
 class LayerConfig:
     
     def __init__(self, root, settings, plotter=None):
         self.root = root
+        # Modern window styling
+        self.root.configure(bg='#f0f0f0')
         self.root.title("Optical Layer Configuration")
         self.plotter = plotter
         self.settings = settings
         self.dbr_layers = settings["dbr_layers"]
         self.metal_layers = settings["metal_layers"]
         
+        self.drude_cache = {}  # Cache for precomputed results
+        self.initialize_drude_lookup_table()
+        self.cancel_fitting_flag = False  # For tracking cancellation
+        self.fit_progress_value = 0  # For progress tracking
+        self.fit_status_message = ""  # For status updates
+
         # Modern styling with better colors
         self.style = tb.Style("minty")
         self.style.configure("TLabel", font=('Helvetica', 10))
@@ -26,9 +40,23 @@ class LayerConfig:
         # Configure root window to fill screen
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        root.geometry(f"{int(screen_width*0.95)}x{int(screen_height*0.9)}")
+        root.geometry(f"{int(screen_width*0.95)}x{int(screen_height*0.9)}+20+20")
         root.resizable(True, True)
         
+        # Customize theme colors
+        self.style.configure(".", font=('Segoe UI', 10))
+        self.style.configure("TButton", padding=6, relief="flat")
+        self.style.configure("TEntry", padding=5, relief="flat")
+        self.style.configure("TCombobox", padding=5)
+        
+        # Add a modern header
+        header = tb.Frame(root, bootstyle="primary", height=60)
+        header.pack(fill=X)
+        tb.Label(header, 
+                text="Optical Layer Simulator", 
+                font=('Segoe UI', 16, 'bold'), 
+                bootstyle="inverse-primary").pack(side=LEFT, padx=20)
+
         # Main container with improved scrolling
         self.main_container = tb.Frame(root)
         self.main_container.pack(fill=BOTH, expand=True)
@@ -60,6 +88,10 @@ class LayerConfig:
         # Bind mousewheel for scrolling
         self.left_canvas.bind_all("<MouseWheel>", lambda e: self.left_canvas.yview_scroll(-1*(e.delta//120), "units"))
         
+        # Remove native window decorations for modern look
+        self.root.overrideredirect(False)
+
+
         # Initialize UI sections
         self.setup_gui()
         self.setup_manual_layer_entry()
@@ -192,8 +224,129 @@ class LayerConfig:
         )
         self.add_layer_button.pack(pady=10)
 
+        # Add Drude fitting controls for manual layers
+        self.setup_manual_drude_fitting()
+        
         # List to store manual layers
         self.manual_layers = []
+
+    def initialize_drude_lookup_table(self):
+        """Create a grid of Drude parameters for interpolation"""
+        # Define parameter ranges with 0.1 steps
+        self.f0_grid = np.arange(0.1, 20.1, 0.1)
+        self.gamma0_grid = np.arange(0.1, 5.1, 0.1) 
+        self.wp_grid = np.arange(1.0, 20.1, 0.1)
+        
+        # Create mesh grid for interpolation
+        self.F0, self.GAMMA0, self.WP = np.meshgrid(
+            self.f0_grid, self.gamma0_grid, self.wp_grid, indexing='ij'
+        )
+        
+        # Initialize empty cache (will be populated on demand)
+        self.drude_cache = {}
+
+    def get_cached_reflectance(self, f0, gamma0, wp, wavelength):
+        """Get reflectance from cache or compute if not available"""
+        # Round parameters to nearest 0.1 for caching
+        f0_rounded = round(f0, 1)
+        gamma0_rounded = round(gamma0, 1)
+        wp_rounded = round(wp, 1)
+        
+        # Check cache
+        key = (f0_rounded, gamma0_rounded, wp_rounded, tuple(wavelength))
+        if key not in self.drude_cache:
+            # Compute and cache if not available
+            self.drude_cache[key] = self.compute_reflectance_for_params(
+                f0, gamma0, wp, wavelength
+            )
+        return self.drude_cache[key]
+
+    def compute_reflectance_for_params(self, f0, gamma0, wp, wavelength):
+        """Compute reflectance for specific parameters using your existing calculation"""
+        # This should contain your actual reflectance calculation logic
+        # Here's a template - replace with your actual calculation:
+        
+        # Create metal layer with current parameters
+        thickness = float(self.unknown_thickness_entry.get())
+        metal_layers = [[thickness, "Drude", [f0, wp, gamma0]]]
+        
+        # Get other layers
+        dbr_stack, _, substrate_layer = self.get_layers()
+        
+        # Build layer structure
+        Ls_structure = (
+            [[np.nan, "Constant", [1.0, 0.0]]] +
+            metal_layers +
+            (dbr_stack if dbr_stack else []) +
+            substrate_layer
+        )
+        
+        if not self.light_direction_frame:
+            Ls_structure = Ls_structure[::-1]
+        
+        # Convert wavelength to nm if needed
+        x = np.array(wavelength) * 1000
+        angle = float(self.angle_entry.get())
+        incang = angle * np.pi / 180 * np.ones(x.size)
+        
+        # Calculate reflection coefficients
+        rs, rp, _, _ = MF.calc_rsrpTsTp(incang, Ls_structure, x)
+        
+        # Calculate reflectance based on polarization
+        polarization = self.polarization_var.get()
+        if polarization == "s":
+            R0 = np.abs(rs)**2
+        elif polarization == "p":
+            R0 = np.abs(rp)**2
+        else:
+            R0 = 0.5 * (np.abs(rs)**2 + np.abs(rp)**2)
+        
+        return R0
+
+    def setup_manual_drude_fitting(self):
+        """Add Drude parameter controls to manual layer tab"""
+        drude_frame = tb.LabelFrame(
+            self.manual_layer_frame,
+            text="Drude Model Parameters",
+            bootstyle="warning"
+        )
+        drude_frame.pack(fill=X, pady=10)
+        
+        # Thickness
+        tb.Label(drude_frame, text="Metal Thickness (nm):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.manual_metal_thickness = tb.Entry(drude_frame, width=10)
+        self.manual_metal_thickness.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.manual_metal_thickness.insert(0, "50")
+        
+        # Drude parameters
+        self.manual_f0_var = tk.DoubleVar(value=1.0)
+        self.manual_gamma0_var = tk.DoubleVar(value=0.1)
+        self.manual_wp_var = tk.DoubleVar(value=9.0)
+        
+        # f₀ parameter
+        tb.Label(drude_frame, text="f₀ (Oscillator Strength):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        f0_entry = tb.Entry(drude_frame, textvariable=self.manual_f0_var, width=8)
+        f0_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        
+        # Γ₀ parameter
+        tb.Label(drude_frame, text="Γ₀ (Damping Frequency):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        gamma0_entry = tb.Entry(drude_frame, textvariable=self.manual_gamma0_var, width=8)
+        gamma0_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        
+        # ωₚ parameter
+        tb.Label(drude_frame, text="ωₚ (Plasma Frequency):").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        wp_entry = tb.Entry(drude_frame, textvariable=self.manual_wp_var, width=8)
+        wp_entry.grid(row=3, column=1, padx=5, pady=5, sticky="w")
+        
+        # Fit button
+        fit_btn = tb.Button(
+            drude_frame,
+            text="Fit to Raw Data",
+            command=self.fit_drude_to_data,
+            bootstyle="success"
+        )
+        fit_btn.grid(row=4, column=0, columnspan=2, pady=5)
+
 
     def add_manual_layer(self):
         # Create a new frame for this layer
@@ -228,15 +381,96 @@ class LayerConfig:
         thickness_entry = tb.Entry(thickness_frame, width=10)
         thickness_entry.pack(side=LEFT)
         
-        # Material inputs frame
+        # Material type selection
         material_frame = tb.Frame(layer_frame)
         material_frame.pack(fill=X, pady=5)
         
-        # Add the first material input
-        self.add_material_input(material_frame)
+        tb.Label(material_frame, text="Material Type:").pack(side=LEFT, padx=5)
+        self.material_type_var = tk.StringVar(value="Semiconductor")
+        material_type_menu = ttk.OptionMenu(
+            material_frame,
+            self.material_type_var,
+            "Semiconductor",
+            "Semiconductor",
+            "Metal",
+            "Dielectric",
+            command=lambda _: self.update_material_inputs(material_input_frame)
+        )
+        material_type_menu.pack(side=LEFT)
+        
+        # Material inputs frame
+        material_input_frame = tb.Frame(layer_frame)
+        material_input_frame.pack(fill=X, pady=5)
+        
+        # Add initial material input
+        self.add_material_input(material_input_frame, first=True)
         
         # Store the layer frame and its components
-        self.manual_layers.append((layer_frame, thickness_entry, material_frame))
+        self.manual_layers.append({
+            'frame': layer_frame,
+            'thickness_entry': thickness_entry,
+            'material_type_var': self.material_type_var,
+            'material_inputs': material_input_frame
+        })
+
+    def update_material_inputs(self, material_input_frame):
+        """Update the material inputs based on selected material type"""
+        # Clear existing inputs
+        for widget in material_input_frame.winfo_children():
+            widget.destroy()
+        
+        # Add appropriate inputs based on material type
+        material_type = self.material_type_var.get()
+        if material_type == "Semiconductor":
+            self.add_semiconductor_input(material_input_frame)
+        elif material_type == "Metal":
+            self.add_metal_input(material_input_frame)
+        else:  # Dielectric
+            self.add_dielectric_input(material_input_frame)
+
+
+    def add_semiconductor_input(self, parent_frame, first=False):
+        """Add inputs for semiconductor materials (like GaAlAs with Al concentration)"""
+        frame = tb.Frame(parent_frame)
+        frame.pack(fill=X, pady=2)
+        
+        # Material selection
+        tb.Label(frame, text="Material:").pack(side=LEFT, padx=5)
+        material_var = tk.StringVar()
+        material_combo = ttk.Combobox(
+            frame,
+            textvariable=material_var,
+            values=["GaAs", "AlGaAs", "GaSb", "AlAsSb"],
+            width=12
+        )
+        material_combo.pack(side=LEFT, padx=5)
+        
+        # Composition entry for AlGaAs
+        tb.Label(frame, text="Al Composition (%):").pack(side=LEFT, padx=5)
+        composition_entry = tb.Entry(frame, width=8)
+        composition_entry.pack(side=LEFT)
+        composition_entry.insert(0, "0")  # Default to 0% Al
+        
+        # Only add delete button if not first input
+        if not first:
+            del_btn = tb.Button(
+                frame,
+                text="−",
+                command=lambda: frame.destroy(),
+                bootstyle="danger-outline",
+                width=2
+            )
+            del_btn.pack(side=RIGHT, padx=5)
+        
+        # Add another material button
+        if first:
+            add_mat_btn = tb.Button(
+                frame,
+                text="+ Add Material",
+                command=lambda: self.add_semiconductor_input(parent_frame),
+                bootstyle="success-outline"
+            )
+            add_mat_btn.pack(side=RIGHT, padx=5)
 
     def delete_manual_layer(self, frame):
         for i, (layer_frame, _, _) in enumerate(self.manual_layers):
@@ -352,7 +586,6 @@ class LayerConfig:
     def update_substrate_thickness(self, *args):
         try:
             thickness = float(self.substrate_thickness.get())
-            print(f"Substrate thickness updated to: {thickness} nm")
         except ValueError:
             print("Invalid thickness value")
 
@@ -601,9 +834,25 @@ class LayerConfig:
         # Standard Metal Frame (hidden by default)
         self.standard_metal_frame = tb.Frame(self.metal_frame)
         
-        # Standard metal controls would go here...
-        # (Implementation similar to previous version but with modern styling)
+        # Add "Match to Raw Data" button
+        self.match_btn = tb.Button(
+            self.unknown_metal_frame,
+            text="Match to Raw Data",
+            command=self.fit_drude_to_data,
+            bootstyle="success"
+        )
+        self.match_btn.grid(row=4, column=0, columnspan=3, pady=10)
         
+        # Add progress bar for fitting process
+        self.fit_progress = tb.Progressbar(
+            self.unknown_metal_frame,
+            orient="horizontal",
+            mode="determinate",
+            bootstyle="success-striped"
+        )
+        self.fit_progress.grid(row=5, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+        self.fit_progress.grid_remove()
+
         # Configure grid weights
         self.metal_frame.grid_rowconfigure(1, weight=1)
         self.metal_frame.grid_columnconfigure(0, weight=1)
@@ -666,9 +915,216 @@ class LayerConfig:
         layer = [thickness, "Drude", [f0, wp, gamma0]]
         self.metal_layers = [layer]  # Replace any existing layers
         
-        # Show confirmation
+      # Show confirmation
         messagebox.showinfo("Success", "Drude parameters updated successfully!")
         print("Updated Drude Parameters:", self.settings["metal_layers"])
+
+    def fit_drude_to_data(self):
+        """Fit Drude parameters to match the raw reflectance data"""
+        if not hasattr(self.plotter, 'raw_data') or self.plotter.raw_data is None:
+            messagebox.showerror("Error", "No raw data uploaded to match against")
+            return
+            
+        try:
+            # Disable button during fitting
+            self.match_btn.configure(state="disabled")
+            
+            # Create loading window
+            self.loading_window = tb.Toplevel(self.root)
+            self.loading_window.title("Fitting Drude Parameters")
+            self.loading_window.geometry("400x200")
+            self.loading_window.resizable(False, False)
+            
+            # Add progress bar and status
+            tb.Label(self.loading_window, 
+                    text="Fitting Drude parameters to raw data...",
+                    font=('Helvetica', 10)).pack(pady=10)
+            
+            self.progress_bar = tb.Progressbar(
+                self.loading_window,
+                orient="horizontal",
+                length=300,
+                mode="determinate",
+                bootstyle="success-striped"
+            )
+            self.progress_bar.pack(pady=10)
+            
+            self.status_label = tb.Label(
+                self.loading_window,
+                text="Initializing optimization...",
+                wraplength=380
+            )
+            self.status_label.pack(pady=10)
+            
+            # Cancel button
+            tb.Button(
+                self.loading_window,
+                text="Cancel",
+                command=self.cancel_fitting,
+                bootstyle="danger"
+            ).pack(pady=10)
+            
+            # Get current configuration
+            angle = float(self.angle_entry.get())
+            polarization = self.polarization_var.get()
+            dbr_stack, _, substrate_layer = self.get_layers()
+            thickness = float(self.unknown_thickness_entry.get())
+            
+            # Run fitting in background thread
+            self.cancel_fitting_flag = False
+            self.fit_progress_value = 0
+            self.fit_status_message = "Starting optimization..."
+            
+            self.fit_thread = threading.Thread(
+                target=self._perform_drude_fitting,
+                args=(angle, polarization, thickness, dbr_stack, substrate_layer),
+                daemon=True
+            )
+            self.fit_thread.start()
+            
+            # Start progress updater
+            self.update_progress()
+            
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid parameters: {str(e)}")
+            if hasattr(self, 'loading_window'):
+                self.loading_window.destroy()
+            self.match_btn.configure(state="normal")
+        except Exception as e:
+            messagebox.showerror("Error", f"Unexpected error: {str(e)}")
+            if hasattr(self, 'loading_window'):
+                self.loading_window.destroy()
+            self.match_btn.configure(state="normal")
+
+    def cancel_fitting(self):
+        """Cancel the fitting process"""
+        self.cancel_fitting_flag = True
+        if hasattr(self, 'loading_window'):
+            self.loading_window.destroy()
+        self.match_btn.configure(state="normal")
+
+    def update_progress(self):
+        """Update the progress bar during fitting"""
+        if hasattr(self, 'loading_window') and self.loading_window.winfo_exists():
+            try:
+                # Update progress bar and status
+                self.progress_bar["value"] = self.fit_progress_value
+                self.status_label.config(text=self.fit_status_message)
+                
+                if self.fit_progress_value < 100 and not self.cancel_fitting_flag:
+                    self.root.after(200, self.update_progress)
+                else:
+                    self.loading_window.destroy()
+                    self.match_btn.configure(state="normal")
+            except:
+                pass
+
+    def _perform_drude_fitting(self, angle, polarization, thickness, dbr_stack, substrate_layer):
+        """Perform the actual Drude parameter fitting"""
+        try:
+            from scipy.optimize import minimize
+            
+            # Get raw data
+            raw_wavelength = pd.to_numeric(self.plotter.raw_data['wavelength'].values, errors='coerce')
+            raw_reflectance = pd.to_numeric(self.plotter.raw_data['reflectance'].values, errors='coerce')
+            
+            # Remove any NaN values
+            valid_mask = ~(np.isnan(raw_wavelength)) | ~(np.isnan(raw_reflectance))
+            raw_wavelength = raw_wavelength[valid_mask]
+            raw_reflectance = raw_reflectance[valid_mask]
+            
+            if len(raw_wavelength) == 0:
+                raise ValueError("No valid data points in raw data")
+                
+            # Initial guess
+            x0 = np.array([
+                float(self.f0_var.get()), 
+                float(self.wp_var.get()), 
+                float(self.gamma0_var.get())
+            ])
+        
+            # Bounds for parameters (f0, wp, gamma0)
+            bounds = [(0.1, 20), (1, 20), (0.01, 5)]
+            
+            # Progress callback
+            def progress_callback(xk, state=None):
+                self.fit_progress_value = (state.nit / state.maxiter) * 100
+                self.fit_status_message = (
+                    f"Iteration {state.nit}/{state.maxiter}\n"
+                    f"Current error: {state.fun:.4f}\n"
+                    f"Parameters: f₀={xk[0]:.2f}, ωₚ={xk[1]:.2f}, Γ₀={xk[2]:.2f}"
+                )
+            
+            # Optimized objective function with caching
+            def objective(params):
+                if self.cancel_fitting_flag:
+                    raise RuntimeError("Fitting cancelled by user")
+                    
+                try:
+                    # Get reflectance from cache or compute
+                    f0, wp, gamma0 = params
+                    R0 = self.get_cached_reflectance(f0, wp, gamma0, raw_wavelength)
+                    
+                    # Calculate mean squared error
+                    error = np.mean((R0 - raw_reflectance)**2)
+                    return error
+                    
+                except Exception as e:
+                    print(f"Error in objective function: {str(e)}")
+                    return np.inf
+
+            # Run optimization
+            result = minimize(
+                objective,
+                x0,
+                bounds=bounds,
+                method='L-BFGS-B',
+                callback=progress_callback,
+                options={
+                    'maxiter': 50,
+                    'disp': True,
+                    'ftol': 1e-4,
+                    'eps': 0.1
+                }
+            )
+            
+            # Update UI with results
+            if not self.cancel_fitting_flag:
+                self.root.after(0, lambda: self._update_fitted_params(result.x))
+                    
+        except Exception as err:
+            self.root.after(0, lambda err=err: messagebox.showerror("Fitting Error", str(err)))
+        finally:
+            self.fit_progress_value = 100
+            self.root.after(0, lambda: self.match_btn.configure(state="normal"))
+            if hasattr(self, 'loading_window'):
+                self.root.after(0, lambda: self.loading_window.destroy())
+                
+    def _update_fitted_params(self, params):
+        """Update the UI with fitted parameters"""
+        f0, wp, gamma0 = params
+        
+        # Update variables and sliders
+        self.f0_var.set(round(f0, 3))
+        self.wp_var.set(round(wp, 3))
+        self.gamma0_var.set(round(gamma0, 3))
+        
+        # Update plot
+        if self.plotter and hasattr(self.plotter, 'current_plot'):
+            angle = float(self.angle_entry.get())
+            polarization = self.polarization_var.get()
+            self.plot_reflectance()
+        
+        # Show success message
+        success_msg = (
+            f"Fitted Drude Parameters:\n"
+            f"f₀ = {round(f0, 3)}\n"
+            f"ωₚ = {round(wp, 3)}\n"
+            f"Γ₀ = {round(gamma0, 3)}\n\n"
+            f"These values have been automatically applied."
+        )
+        messagebox.showinfo("Success", success_msg)
+
 
     def add_metal_layer(self):
         try:
@@ -795,26 +1251,28 @@ class LayerConfig:
             manual_layers = []
             for layer in self.manual_layers:
                 try:
-                    thickness = float(layer[1].get())
+                    thickness = float(layer['thickness_entry'].get())
                 except ValueError:
-                    print(f"Warning: Invalid thickness entry '{layer[1].get()}'. Skipping this layer.")
+                    print(f"Warning: Invalid thickness entry. Skipping this layer.")
                     continue
 
                 materials = []
                 material_entries = []
 
-                current_material = None
-                for child in layer[2].winfo_children():
-                    if isinstance(child, ttk.Combobox):
-                        current_material = child.get()
-                    elif isinstance(child, tk.Entry):
-                        try:
-                            composition = float(child.get())
-                            if current_material:
-                                material_entries.append((current_material, composition))
-                        except ValueError:
-                            print(f"Warning: Skipping invalid composition entry: '{child.get()}'")
-
+                # Get all material inputs for this layer
+                for child in layer['material_inputs'].winfo_children():
+                    if isinstance(child, tb.Frame):
+                        # Find the combo box and entry in this frame
+                        for widget in child.winfo_children():
+                            if isinstance(widget, ttk.Combobox):
+                                material = widget.get()
+                            elif isinstance(widget, tb.Entry):
+                                try:
+                                    composition = float(widget.get())
+                                    material_entries.append((material, composition))
+                                except ValueError:
+                                    print(f"Warning: Skipping invalid composition entry")
+                
                 # Calculate total composition percentage
                 total_percent = sum(comp for _, comp in material_entries)
 
@@ -824,18 +1282,43 @@ class LayerConfig:
 
                 # Normalize if total isn't 100%
                 if total_percent != 100:
-                    material_entries = [(mat, (comp / total_percent) * 100) for mat, comp in material_entries]
+                    material_entries = [(mat, (comp / total_percent) * 100) 
+                                    for mat, comp in material_entries]
 
                 # Create sublayers based on composition
                 for material, percent in material_entries:
                     sublayer_thickness = thickness * (percent / 100)
-
-                    if material in ["GaSb", "AlAsSb"]:
+                    
+                    # Handle different material types
+                    if material == "GaAs":
+                        manual_layers.append([sublayer_thickness, "Constant", [3.5, 0.0]])  # GaAs refractive index
+                    elif material == "AlGaAs":
+                        al_percent = percent  # Aluminum percentage
+                        # Calculate refractive index based on Al concentration (linear approximation)
+                        n_GaAs = 3.5
+                        n_AlAs = 2.9
+                        n_AlGaAs = n_GaAs + (n_AlAs - n_GaAs) * (al_percent/100)
+                        manual_layers.append([sublayer_thickness, "Constant", [n_AlGaAs, 0.0]])
+                    elif material in ["GaSb", "AlAsSb"]:
                         manual_layers.append([sublayer_thickness, "Constant", f"{material}_ln"])
-                    elif material in ["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"]:
-                        manual_layers.append([sublayer_thickness, "Lorentz-Drude", [material, 0, 0, 0, 0, 0, 0]])
                     else:
                         manual_layers.append([sublayer_thickness, "Constant", [1.0, 0.0]])
+
+            # Add metal layer from manual Drude parameters if specified
+            try:
+                metal_thickness = float(self.manual_metal_thickness.get())
+                f0 = float(self.manual_f0_var.get())
+                gamma0 = float(self.manual_gamma0_var.get())
+                wp = float(self.manual_wp_var.get())
+                
+                metal_layer = [
+                    metal_thickness, 
+                    "Drude", 
+                    [f0, wp, gamma0]
+                ]
+                manual_layers.insert(0, metal_layer)  # Add metal layer at the beginning
+            except ValueError:
+                print("Warning: Invalid metal layer parameters - skipping")
 
             # Substrate handling
             substrate_material = (
@@ -847,11 +1330,12 @@ class LayerConfig:
             try:
                 substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
             except ValueError:
-                print(f"Warning: Invalid substrate thickness entry: '{self.substrate_thickness.get()}'. Using NaN.")
+                print(f"Warning: Invalid substrate thickness entry. Using NaN.")
                 substrate_thickness = float('nan')
             substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
 
             return [], manual_layers, substrate_layer
+        
 
         else:
             # Predefined DBR layer setup
