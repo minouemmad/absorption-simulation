@@ -290,11 +290,65 @@ class LayerConfig:
         )
         self.add_layer_button.pack(pady=10)
         
+        # Add Repeat Layers controls
+        repeat_frame = tb.Frame(self.manual_layer_frame)
+        repeat_frame.pack(fill=X, pady=10)
+        
+        tb.Label(repeat_frame, text="Repeat Selected Layers:").pack(side=LEFT, padx=5)
+        
+        self.repeat_times_entry = tb.Entry(repeat_frame, width=5)
+        self.repeat_times_entry.pack(side=LEFT, padx=5)
+        self.repeat_times_entry.insert(0, "1")
+        
+        repeat_btn = tb.Button(
+            repeat_frame,
+            text="Apply Repeat",
+            command=self.apply_layer_repeat,
+            bootstyle="info"
+        )
+        repeat_btn.pack(side=LEFT, padx=5)
+        
         # List to store manual layers
         self.manual_layers = []
         
         # Add Drude fitting controls for manual layers
         self.setup_manual_drude_fitting()
+
+    def apply_layer_repeat(self):
+        """Repeat the selected layers the specified number of times"""
+        try:
+            repeat_times = int(self.repeat_times_entry.get())
+            if repeat_times < 1:
+                raise ValueError("Repeat times must be at least 1")
+                
+            # Get indices of selected layers
+            selected_indices = [
+                i for i, layer in enumerate(self.manual_layers) 
+                if layer['select_var'].get()
+            ]
+            
+            if not selected_indices:
+                messagebox.showwarning("No Selection", "No layers selected for repeating")
+                return
+                
+            # Create copies of selected layers
+            new_layers = []
+            for i in selected_indices:
+                original_layer = self.manual_layers[i]
+                for _ in range(repeat_times):
+                    # Create a copy of the layer
+                    new_layer = self.add_manual_layer()
+                    # Copy all properties from original layer
+                    new_layer['type_var'].set(original_layer['type_var'].get())
+                    new_layer['thickness_entry'].delete(0, tk.END)
+                    new_layer['thickness_entry'].insert(0, original_layer['thickness_entry'].get())
+                    # Update material inputs (this is more complex and might need additional handling)
+                    self.update_material_inputs(new_layer['frame'])
+                    
+            messagebox.showinfo("Success", f"Repeated selected layers {repeat_times} times")
+            
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid repeat value: {str(e)}")
 
     def toggle_manual_finite_substrate(self):
         if self.manual_is_finite_substrate.get():
@@ -545,9 +599,8 @@ class LayerConfig:
                 self.add_material_input(material_input_frame, material_type, first=True)
                 break
 
-
     def add_semiconductor_input(self, parent_frame, first=False):
-        """Add inputs for semiconductor materials (like GaAlAs with Al concentration)"""
+        """Add inputs for semiconductor materials with optional composition"""
         frame = tb.Frame(parent_frame)
         frame.pack(fill=X, pady=2)
         
@@ -557,38 +610,52 @@ class LayerConfig:
         material_combo = ttk.Combobox(
             frame,
             textvariable=material_var,
-            values=["GaAs", "AlGaAs", "GaSb", "AlAsSb"],
+            values=["GaAs", "AlGaAs", "GaSb", "AlAsSb", "InSb", "AlSb", "InAs", "InAsSb"],
             width=12,
             state="readonly"
         )
         material_combo.pack(side=LEFT, padx=5)
         material_combo.set("GaAs")  # Default value
         
-        # Composition entry - will be shown/hidden based on material
-        self.comp_label = tb.Label(frame, text="Composition (%):")
-        self.comp_entry = tb.Entry(frame, width=8)
+        # Composition frame
+        comp_frame = tb.Frame(frame)
+        comp_frame.pack(side=LEFT, padx=5)
         
-        # Function to check for metals in semiconductor and show appropriate composition field
+        # Composition checkbox
+        self.use_composition = tk.BooleanVar(value=False)
+        comp_check = tb.Checkbutton(
+            comp_frame,
+            text="Specify Composition",
+            variable=self.use_composition,
+            bootstyle="primary-round-toggle",
+            command=lambda: self.toggle_composition_entry(comp_entry)
+        )
+        comp_check.pack(side=LEFT)
+        
+        # Composition entry (initially disabled)
+        comp_entry = tb.Entry(comp_frame, width=8, state="disabled")
+        comp_entry.pack(side=LEFT, padx=5)
+        
+        # Function to update composition field based on material
         def update_composition_field(*args):
             material = material_var.get()
-            self.comp_label.pack_forget()
-            self.comp_entry.pack_forget()
-            
-            if material in ["AlGaAs", "AlAsSb"]:
-                self.comp_label.config(text="Al Composition (%):")
-                self.comp_label.pack(side=LEFT, padx=5)
-                self.comp_entry.pack(side=LEFT)
-                self.comp_entry.delete(0, tk.END)
-                self.comp_entry.insert(0, "0")
-            elif material in ["GaAs", "GaSb"]:
-                self.comp_label.config(text="Ga Composition (%):")
-                self.comp_label.pack(side=LEFT, padx=5)
-                self.comp_entry.pack(side=LEFT)
-                self.comp_entry.delete(0, tk.END)
-                self.comp_entry.insert(0, "100")
+            if material in ["AlGaAs", "AlAsSb", "InAsSb"]:
+                comp_check.config(state="normal")
+                if self.use_composition.get():
+                    comp_entry.config(state="normal")
+                    if material == "AlGaAs":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "30")  # Default Al composition
+                    elif material == "AlAsSb":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "50")  # Default AlAs composition
+                    elif material == "InAsSb":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "50")  # Default InAs composition
             else:
-                # For other materials, don't show composition field
-                pass
+                comp_check.config(state="disabled")
+                comp_entry.config(state="disabled")
+                self.use_composition.set(False)
         
         # Initial setup
         update_composition_field()
@@ -604,6 +671,81 @@ class LayerConfig:
                 width=2
             )
             del_btn.pack(side=RIGHT, padx=5)
+
+    def add_manual_layer(self):
+        layer_num = len(self.manual_layers) + 2  # +1 for substrate, +1 for 0-based index
+        
+        # Create a new frame for this layer
+        layer_frame = tb.LabelFrame(
+            self.layers_container,
+            text=f"Layer {layer_num}",
+            bootstyle="info"
+        )
+        layer_frame.pack(fill=X, pady=5, padx=5)
+        
+        # Checkbox for selecting this layer for repeating
+        select_var = tk.BooleanVar(value=False)
+        select_check = tb.Checkbutton(
+            layer_frame,
+            text="Select for Repeating",
+            variable=select_var,
+            bootstyle="primary-round-toggle"
+        )
+        select_check.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        # Material type selection
+        tb.Label(layer_frame, text="Layer Type:").grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        material_type_var = tk.StringVar(value="Semiconductor")
+        material_type_menu = ttk.Combobox(
+            layer_frame,
+            textvariable=material_type_var,
+            values=["Semiconductor", "Dielectric", "Metal"],
+            width=15,
+            state="readonly"
+        )
+        material_type_menu.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        material_type_menu.bind("<<ComboboxSelected>>", lambda e, f=layer_frame: self.update_material_inputs(f))
+        
+        # Thickness entry
+        tb.Label(layer_frame, text="Thickness (nm):").grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        thickness_entry = tb.Entry(layer_frame, width=10)
+        thickness_entry.grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        thickness_entry.insert(0, "100")  # Default thickness
+        
+        # Frame for material inputs
+        material_input_frame = tb.Frame(layer_frame)
+        material_input_frame.grid(row=1, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
+        
+        # Add initial material input based on type
+        self.add_material_input(material_input_frame, material_type_var.get(), first=True)
+        
+        # Delete button
+        delete_btn = tb.Button(
+            layer_frame,
+            text="Delete Layer",
+            command=lambda: self.delete_manual_layer(layer_frame),
+            bootstyle="danger-outline"
+        )
+        delete_btn.grid(row=0, column=5, padx=5, pady=5)
+        
+        # Store the layer components
+        self.manual_layers.append({
+            'frame': layer_frame,
+            'type_var': material_type_var,
+            'thickness_entry': thickness_entry,
+            'material_inputs': material_input_frame,
+            'select_var': select_var
+        })
+        
+        # Update canvas scroll region
+        self.layers_canvas.configure(scrollregion=self.layers_canvas.bbox("all"))
+
+    def toggle_composition_entry(self, entry):
+        """Toggle composition entry based on checkbox"""
+        if self.use_composition.get():
+            entry.config(state="normal")
+        else:
+            entry.config(state="disabled")
 
     def delete_manual_layer(self, frame):
         """Remove a manual layer from the stack"""
@@ -1513,7 +1655,7 @@ class LayerConfig:
                         dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
 
             return dbr_stack, self.metal_layers, substrate_layer
-        
+
     def _get_material_properties(self, layer):
         """Extract material properties from a layer's input frame"""
         properties = []
@@ -1620,9 +1762,42 @@ class LayerConfig:
             # Linear interpolation
             n = n_GaSb + (n_AlSb - n_GaSb) * x
             k = k_GaSb + (k_AlSb - k_GaSb) * x
-            
-            return (n, k)
-            
+            return(n,k)
+
+        elif material == "InSb":
+            # From the first dataset you provided (Mikhail Polyanskiy)
+            # At ~1.5 eV (827 nm)
+            n, k = 3.8, 0.0
+            return(n,k)
+           
+        elif material == "AlSb":
+            # From the second dataset you provided (Mikhail Polyanskiy)
+            # At ~2.0 eV (620 nm)
+            n, k = 3.1, 0.0
+            return(n,k)
+
+        elif material == "InAs":
+            # From the third dataset you provided (Mikhail Polyanskiy)
+            # At ~1.5 eV (827 nm)
+            n, k = 3.5, 0.0
+            return(n,k)
+        elif material == "InAsSb":
+            # For InAs(x)Sb(1-x), interpolate between InAs and InSb
+
+                x = composition / 100.0
+                # InSb (x=0) parameters
+                n_InSb = 3.8
+                k_InSb = 0.0
+                
+                # InAs (x=1) parameters
+                n_InAs = 3.5
+                k_InAs = 0.0
+                
+                # Linear interpolation
+                n = n_InSb + (n_InAs - n_InSb) * x
+                k = k_InSb + (k_InAs - k_InSb) * x
+                return (n, k)
+        
         else:
             return (1.0, 0.0)  # Default for unknown materials
 
