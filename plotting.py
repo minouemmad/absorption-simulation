@@ -302,7 +302,7 @@ class PlotReflectance:
                 T0 = np.real(Tp)
                 Abs1 = 1.0 - R0 - T0
                 
-            if substrate_thickness != 0.0 or substrate_thickness != None:  # Check if finite substrate is selected
+            if not np.isnan(substrate_thickness) and substrate_thickness > 0:
                 print("Finite substrate thickness in microns: " + str(substrate_thickness/1000))
                 R_finite = np.zeros_like(R0)
 

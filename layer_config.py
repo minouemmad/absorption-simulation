@@ -29,7 +29,11 @@ class LayerConfig:
         self.cancel_fitting_flag = False  # For tracking cancellation
         self.fit_progress_value = 0  # For progress tracking
         self.fit_status_message = ""  # For status updates
+        self.substrate_thickness = tk.StringVar(value="0")  # Add this line
 
+        self.manual_layer_var = tk.BooleanVar(value=False)
+        self.manual_mode_active = False  # Additional flag to track manual mode
+        
         # Modern styling with better colors
         self.style = tb.Style("minty")
         self.style.configure("TLabel", font=('Helvetica', 10))
@@ -178,7 +182,7 @@ class LayerConfig:
     def plot_reflectance(self):
         if hasattr(self, 'on_plot_reflectance'):
             self.on_plot_reflectance()
-            
+
     def plot_electric_field(self):
         if hasattr(self, 'on_plot_electric_field'):
             self.on_plot_electric_field()
@@ -196,7 +200,7 @@ class LayerConfig:
         self.manual_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.manual_tab, text="Manual Layer Entry")
         
-        # Checkbox for manual layer entry
+        # Enable checkbox
         self.manual_layer_var = tk.BooleanVar(value=False)
         manual_check = tb.Checkbutton(
             self.manual_tab,
@@ -205,30 +209,124 @@ class LayerConfig:
             bootstyle="primary-round-toggle",
             command=self.toggle_manual_layer_entry
         )
-        manual_check.grid(row=0, column=0, columnspan=3, sticky="w", pady=10, padx=10)
+        manual_check.pack(pady=10, padx=10, anchor="w")
 
-        # Frame for manual layer input
+        # Frame for manual layer configuration
         self.manual_layer_frame = tb.LabelFrame(
             self.manual_tab,
-            text="Manual Layer Configuration",
+            text="Layer Stack Configuration",
             bootstyle="info"
         )
-        self.manual_layer_frame.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=10, pady=5)
+        self.manual_layer_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        # Substrate section (always first layer)
+        self.substrate_frame = tb.LabelFrame(
+            self.manual_layer_frame,
+            text="Substrate (Layer 1)",
+            bootstyle="primary"
+        )
+        self.substrate_frame.pack(fill=X, padx=5, pady=5)
+        
+        # Substrate material selection
+        tb.Label(self.substrate_frame, text="Material:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.substrate_var = tk.StringVar(value="GaSb")
+        substrate_combo = ttk.Combobox(
+            self.substrate_frame,
+            textvariable=self.substrate_var,
+            values=["GaSb", "GaAs", "Air"],
+            width=15
+        )
+        substrate_combo.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        
+        # Finite substrate toggle for manual entry
+        self.manual_is_finite_substrate = tk.BooleanVar(value=False)
+        finite_check = tb.Checkbutton(
+            self.substrate_frame,
+            text="Finite Substrate",
+            variable=self.manual_is_finite_substrate,
+            bootstyle="primary-round-toggle",
+            command=self.toggle_manual_finite_substrate
+        )
+        finite_check.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        
+        # Thickness entry for substrate
+        self.manual_substrate_thickness = tk.StringVar(value="0")
+        tb.Label(self.substrate_frame, text="Thickness (nm):").grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        self.substrate_thickness_entry = tb.Entry(
+            self.substrate_frame, 
+            textvariable=self.manual_substrate_thickness, 
+            width=10,
+            state="disabled"  # Start disabled for semi-infinite
+        )
+        self.substrate_thickness_entry.grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        
+        # Frame for additional layers
+        self.additional_layers_frame = tb.Frame(self.manual_layer_frame)
+        self.additional_layers_frame.pack(fill=BOTH, expand=True, pady=5)
+        
+        # Scrollable area for layers
+        self.layers_canvas = tk.Canvas(self.additional_layers_frame)
+        self.layers_scroll = tb.Scrollbar(self.additional_layers_frame, orient=VERTICAL, command=self.layers_canvas.yview)
+        self.layers_canvas.configure(yscrollcommand=self.layers_scroll.set)
+        
+        self.layers_scroll.pack(side=RIGHT, fill=Y)
+        self.layers_canvas.pack(side=LEFT, fill=BOTH, expand=True)
+        
+        self.layers_container = tb.Frame(self.layers_canvas)
+        self.layers_canvas.create_window((0, 0), window=self.layers_container, anchor="nw")
+        
+        self.layers_container.bind("<Configure>", lambda e: self.layers_canvas.configure(
+            scrollregion=self.layers_canvas.bbox("all")))
+        
+        # Bind mousewheel for scrolling
+        self.layers_canvas.bind_all("<MouseWheel>", lambda e: self.layers_canvas.yview_scroll(-1*(e.delta//120), "units"))
         
         # Add Layer button
         self.add_layer_button = tb.Button(
             self.manual_layer_frame,
-            text="+ Add Layer",
+            text="+ Add New Layer",
             command=self.add_manual_layer,
             bootstyle="success"
         )
         self.add_layer_button.pack(pady=10)
-
-        # Add Drude fitting controls for manual layers
-        self.setup_manual_drude_fitting()
         
         # List to store manual layers
         self.manual_layers = []
+        
+        # Add Drude fitting controls for manual layers
+        self.setup_manual_drude_fitting()
+
+    def toggle_manual_finite_substrate(self):
+        if self.manual_is_finite_substrate.get():
+            self.substrate_thickness_entry.configure(state="normal")
+        else:
+            self.substrate_thickness_entry.configure(state="disabled")
+
+    def toggle_manual_layer_entry(self):
+        """Toggle between manual and standard configuration"""
+        self.manual_mode_active = self.manual_layer_var.get()
+        
+        if self.manual_mode_active:
+            self.notebook.select(self.manual_tab)
+            # Enable manual layer frame
+            self.manual_layer_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        else:
+            self.notebook.select(0)  # Select first tab (standard configuration)
+            # Disable manual layer frame
+            self.manual_layer_frame.pack_forget()
+        
+        # Force update the manual mode state
+        self.update_manual_mode_state()
+
+    def update_manual_mode_state(self):
+        """Ensure manual mode state is consistent with UI elements"""
+        # Check if manual tab is currently selected
+        current_tab = self.notebook.index(self.notebook.select())
+        is_manual_tab = (current_tab == self.notebook.index(self.manual_tab))
+        
+        # Update the state based on both the checkbox and the active tab
+        self.manual_mode_active = self.manual_layer_var.get() and is_manual_tab
+
 
     def initialize_drude_lookup_table(self):
         """Create a grid of Drude parameters for interpolation"""
@@ -307,15 +405,26 @@ class LayerConfig:
         """Add Drude parameter controls to manual layer tab"""
         drude_frame = tb.LabelFrame(
             self.manual_layer_frame,
-            text="Drude Model Parameters",
+            text="Metal Layer (Drude Model)",
             bootstyle="warning"
         )
         drude_frame.pack(fill=X, pady=10)
         
+        # Add checkbox to enable/disable metal layer
+        self.include_metal_var = tk.BooleanVar(value=True)
+        include_metal_check = tb.Checkbutton(
+            drude_frame,
+            text="Include Metal Layer",
+            variable=self.include_metal_var,
+            bootstyle="warning-round-toggle",
+            command=self.toggle_metal_layer_inclusion
+        )
+        include_metal_check.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+        
         # Thickness
-        tb.Label(drude_frame, text="Metal Thickness (nm):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        tb.Label(drude_frame, text="Metal Thickness (nm):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.manual_metal_thickness = tb.Entry(drude_frame, width=10)
-        self.manual_metal_thickness.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.manual_metal_thickness.grid(row=1, column=1, padx=5, pady=5, sticky="w")
         self.manual_metal_thickness.insert(0, "50")
         
         # Drude parameters
@@ -324,19 +433,19 @@ class LayerConfig:
         self.manual_wp_var = tk.DoubleVar(value=9.0)
         
         # f₀ parameter
-        tb.Label(drude_frame, text="f₀ (Oscillator Strength):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        tb.Label(drude_frame, text="f₀ (Oscillator Strength):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         f0_entry = tb.Entry(drude_frame, textvariable=self.manual_f0_var, width=8)
-        f0_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        f0_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
         
         # Γ₀ parameter
-        tb.Label(drude_frame, text="Γ₀ (Damping Frequency):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        tb.Label(drude_frame, text="Γ₀ (Damping Frequency):").grid(row=3, column=0, padx=5, pady=5, sticky="w")
         gamma0_entry = tb.Entry(drude_frame, textvariable=self.manual_gamma0_var, width=8)
-        gamma0_entry.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        gamma0_entry.grid(row=3, column=1, padx=5, pady=5, sticky="w")
         
         # ωₚ parameter
-        tb.Label(drude_frame, text="ωₚ (Plasma Frequency):").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        tb.Label(drude_frame, text="ωₚ (Plasma Frequency):").grid(row=4, column=0, padx=5, pady=5, sticky="w")
         wp_entry = tb.Entry(drude_frame, textvariable=self.manual_wp_var, width=8)
-        wp_entry.grid(row=3, column=1, padx=5, pady=5, sticky="w")
+        wp_entry.grid(row=4, column=1, padx=5, pady=5, sticky="w")
         
         # Fit button
         fit_btn = tb.Button(
@@ -345,88 +454,96 @@ class LayerConfig:
             command=self.fit_drude_to_data,
             bootstyle="success"
         )
-        fit_btn.grid(row=4, column=0, columnspan=2, pady=5)
+        fit_btn.grid(row=5, column=0, columnspan=2, pady=5)
 
+    def toggle_metal_layer_inclusion(self):
+        """Enable/disable metal layer controls based on checkbox"""
+        state = "normal" if self.include_metal_var.get() else "disabled"
+        
+        # Disable all metal-related controls
+        self.manual_metal_thickness.configure(state=state)
+        
+        # Find and disable all Drude parameter entries
+        for child in self.manual_layer_frame.winfo_children():
+            if isinstance(child, tb.LabelFrame) and "Metal Layer" in child.cget("text"):
+                for widget in child.winfo_children():
+                    if isinstance(widget, tb.Entry):
+                        widget.configure(state=state)
+                    elif isinstance(widget, tb.Button):
+                        widget.configure(state=state)
 
     def add_manual_layer(self):
+        layer_num = len(self.manual_layers) + 2  # +1 for substrate, +1 for 0-based index
+        
         # Create a new frame for this layer
-        layer_frame = tb.Frame(self.manual_layer_frame, bootstyle="light")
+        layer_frame = tb.LabelFrame(
+            self.layers_container,
+            text=f"Layer {layer_num}",
+            bootstyle="info"
+        )
         layer_frame.pack(fill=X, pady=5, padx=5)
         
-        # Layer header with delete button
-        header_frame = tb.Frame(layer_frame)
-        header_frame.pack(fill=X)
-        
-        layer_label = tb.Label(
-            header_frame, 
-            text=f"Layer {len(self.manual_layers) + 1}",
-            font=('Helvetica', 10, 'bold')
+        # Material type selection
+        tb.Label(layer_frame, text="Layer Type:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        material_type_var = tk.StringVar(value="Semiconductor")
+        material_type_menu = ttk.Combobox(
+            layer_frame,
+            textvariable=material_type_var,
+            values=["Semiconductor", "Dielectric", "Metal"],
+            width=15,
+            state="readonly"
         )
-        layer_label.pack(side=LEFT, padx=5)
-        
-        delete_btn = tb.Button(
-            header_frame,
-            text="×",
-            command=lambda: self.delete_manual_layer(layer_frame),
-            bootstyle="danger-outline",
-            width=2
-        )
-        delete_btn.pack(side=RIGHT)
+        material_type_menu.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        material_type_menu.bind("<<ComboboxSelected>>", lambda e, f=layer_frame: self.update_material_inputs(f))
         
         # Thickness entry
-        thickness_frame = tb.Frame(layer_frame)
-        thickness_frame.pack(fill=X, pady=5)
+        tb.Label(layer_frame, text="Thickness (nm):").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        thickness_entry = tb.Entry(layer_frame, width=10)
+        thickness_entry.grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        thickness_entry.insert(0, "100")  # Default thickness
         
-        tb.Label(thickness_frame, text="Thickness (nm):").pack(side=LEFT, padx=5)
-        thickness_entry = tb.Entry(thickness_frame, width=10)
-        thickness_entry.pack(side=LEFT)
-        
-        # Material type selection
-        material_frame = tb.Frame(layer_frame)
-        material_frame.pack(fill=X, pady=5)
-        
-        tb.Label(material_frame, text="Material Type:").pack(side=LEFT, padx=5)
-        self.material_type_var = tk.StringVar(value="Semiconductor")
-        material_type_menu = ttk.OptionMenu(
-            material_frame,
-            self.material_type_var,
-            "Semiconductor",
-            "Semiconductor",
-            "Metal",
-            "Dielectric",
-            command=lambda _: self.update_material_inputs(material_input_frame)
-        )
-        material_type_menu.pack(side=LEFT)
-        
-        # Material inputs frame
+        # Frame for material inputs
         material_input_frame = tb.Frame(layer_frame)
-        material_input_frame.pack(fill=X, pady=5)
+        material_input_frame.grid(row=1, column=0, columnspan=4, sticky="ew", padx=5, pady=5)
         
-        # Add initial material input
-        self.add_material_input(material_input_frame, first=True)
+        # Add initial material input based on type
+        self.add_material_input(material_input_frame, material_type_var.get(), first=True)
         
-        # Store the layer frame and its components
+        # Delete button
+        delete_btn = tb.Button(
+            layer_frame,
+            text="Delete Layer",
+            command=lambda: self.delete_manual_layer(layer_frame),
+            bootstyle="danger-outline"
+        )
+        delete_btn.grid(row=0, column=4, padx=5, pady=5)
+        
+        # Store the layer components
         self.manual_layers.append({
             'frame': layer_frame,
+            'type_var': material_type_var,
             'thickness_entry': thickness_entry,
-            'material_type_var': self.material_type_var,
             'material_inputs': material_input_frame
         })
-
-    def update_material_inputs(self, material_input_frame):
-        """Update the material inputs based on selected material type"""
-        # Clear existing inputs
-        for widget in material_input_frame.winfo_children():
-            widget.destroy()
         
-        # Add appropriate inputs based on material type
-        material_type = self.material_type_var.get()
-        if material_type == "Semiconductor":
-            self.add_semiconductor_input(material_input_frame)
-        elif material_type == "Metal":
-            self.add_metal_input(material_input_frame)
-        else:  # Dielectric
-            self.add_dielectric_input(material_input_frame)
+        # Update canvas scroll region
+        self.layers_canvas.configure(scrollregion=self.layers_canvas.bbox("all"))
+
+    def update_material_inputs(self, layer_frame):
+        """Update the material inputs based on selected layer type"""
+        # Find which layer this is
+        for layer in self.manual_layers:
+            if layer['frame'] == layer_frame:
+                material_type = layer['type_var'].get()
+                material_input_frame = layer['material_inputs']
+                
+                # Clear existing inputs
+                for widget in material_input_frame.winfo_children():
+                    widget.destroy()
+                
+                # Add appropriate inputs
+                self.add_material_input(material_input_frame, material_type, first=True)
+                break
 
 
     def add_semiconductor_input(self, parent_frame, first=False):
@@ -441,17 +558,43 @@ class LayerConfig:
             frame,
             textvariable=material_var,
             values=["GaAs", "AlGaAs", "GaSb", "AlAsSb"],
-            width=12
+            width=12,
+            state="readonly"
         )
         material_combo.pack(side=LEFT, padx=5)
+        material_combo.set("GaAs")  # Default value
         
-        # Composition entry for AlGaAs
-        tb.Label(frame, text="Al Composition (%):").pack(side=LEFT, padx=5)
-        composition_entry = tb.Entry(frame, width=8)
-        composition_entry.pack(side=LEFT)
-        composition_entry.insert(0, "0")  # Default to 0% Al
+        # Composition entry - will be shown/hidden based on material
+        self.comp_label = tb.Label(frame, text="Composition (%):")
+        self.comp_entry = tb.Entry(frame, width=8)
         
-        # Only add delete button if not first input
+        # Function to check for metals in semiconductor and show appropriate composition field
+        def update_composition_field(*args):
+            material = material_var.get()
+            self.comp_label.pack_forget()
+            self.comp_entry.pack_forget()
+            
+            if material in ["AlGaAs", "AlAsSb"]:
+                self.comp_label.config(text="Al Composition (%):")
+                self.comp_label.pack(side=LEFT, padx=5)
+                self.comp_entry.pack(side=LEFT)
+                self.comp_entry.delete(0, tk.END)
+                self.comp_entry.insert(0, "0")
+            elif material in ["GaAs", "GaSb"]:
+                self.comp_label.config(text="Ga Composition (%):")
+                self.comp_label.pack(side=LEFT, padx=5)
+                self.comp_entry.pack(side=LEFT)
+                self.comp_entry.delete(0, tk.END)
+                self.comp_entry.insert(0, "100")
+            else:
+                # For other materials, don't show composition field
+                pass
+        
+        # Initial setup
+        update_composition_field()
+        material_var.trace_add("write", update_composition_field)
+        
+        # Delete button (always shown except for first input)
         if not first:
             del_btn = tb.Button(
                 frame,
@@ -461,24 +604,21 @@ class LayerConfig:
                 width=2
             )
             del_btn.pack(side=RIGHT, padx=5)
-        
-        # Add another material button
-        if first:
-            add_mat_btn = tb.Button(
-                frame,
-                text="+ Add Material",
-                command=lambda: self.add_semiconductor_input(parent_frame),
-                bootstyle="success-outline"
-            )
-            add_mat_btn.pack(side=RIGHT, padx=5)
 
     def delete_manual_layer(self, frame):
-        for i, (layer_frame, _, _) in enumerate(self.manual_layers):
-            if layer_frame == frame:
+        """Remove a manual layer from the stack"""
+        for i, layer in enumerate(self.manual_layers):
+            if layer['frame'] == frame:
                 self.manual_layers.pop(i)
                 frame.destroy()
-                self.update_manual_layer_numbers()
+                self.update_layer_numbers()
                 break
+
+    def update_layer_numbers(self):
+        """Update layer numbering after deletions"""
+        # Substrate is always layer 1
+        for i, layer in enumerate(self.manual_layers, start=2):
+            layer['frame'].config(text=f"Layer {i}")
 
     def update_manual_layer_numbers(self):
         for i, (layer_frame, _, _) in enumerate(self.manual_layers):
@@ -488,52 +628,71 @@ class LayerConfig:
                         if isinstance(child, tb.Label) and "Layer" in child.cget("text"):
                             child.config(text=f"Layer {i+1}")
 
-    def add_material_input(self, material_frame):
-        # Create a frame for this material input
-        mat_frame = tb.Frame(material_frame)
-        mat_frame.pack(fill=X, pady=2)
+    def add_material_input(self, parent_frame, material_type, first=False):
+        """Add inputs for material composition"""
+        frame = tb.Frame(parent_frame)
+        frame.pack(fill=X, pady=2)
         
-        # Material selection
-        material_var = tk.StringVar()
-        material_combo = ttk.Combobox(
-            mat_frame,
-            textvariable=material_var,
-            values=["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt", "GaSb", "GaAs", "AlAsSb"],
-            width=15
-        )
-        material_combo.pack(side=LEFT, padx=5)
-        
-        # Composition entry
-        tb.Label(mat_frame, text="Composition (%):").pack(side=LEFT, padx=5)
-        composition_entry = tb.Entry(mat_frame, width=8)
-        composition_entry.pack(side=LEFT)
-        composition_entry.insert(0, "100")  # Default to 100%
-        
-        # Delete material button
-        del_btn = tb.Button(
-            mat_frame,
-            text="−",
-            command=lambda: mat_frame.destroy(),
-            bootstyle="danger-outline",
-            width=2
-        )
-        del_btn.pack(side=RIGHT, padx=5)
-        
-        # Add another material button
-        if len(material_frame.winfo_children()) == 1:  # Only add if this is the first material
-            add_mat_btn = tb.Button(
-                mat_frame,
-                text="+ Add Material",
-                command=lambda: self.add_material_input(material_frame),
-                bootstyle="success-outline"
+        if material_type == "Semiconductor":
+            # Material selection
+            tb.Label(frame, text="Material:").pack(side=LEFT, padx=5)
+            material_var = tk.StringVar()
+            material_combo = ttk.Combobox(
+                frame,
+                textvariable=material_var,
+                values=["GaAs", "AlGaAs", "GaSb", "AlAsSb", "InAs", "InSb"],
+                width=12,
+                state="readonly"
             )
-            add_mat_btn.pack(side=RIGHT, padx=5)
-
-    def toggle_manual_layer_entry(self):
-        if self.manual_layer_var.get():
-            self.notebook.select(self.manual_tab)
-        else:
-            self.notebook.select(0)  # Select first tab (default configuration)
+            material_combo.pack(side=LEFT, padx=5)
+            material_combo.set("GaAs")  # Default
+            
+            # Composition entry for alloys
+            tb.Label(frame, text="Composition (%):").pack(side=LEFT, padx=5)
+            composition_entry = tb.Entry(frame, width=8)
+            composition_entry.pack(side=LEFT)
+            composition_entry.insert(0, "0")  # Default
+            
+            def toggle_composition(*args):
+                if material_var.get() in ["AlGaAs","AlAsSb", "GaSb", "GaAs", "InAs", "InSb"]:
+                    composition_entry.config(state="normal")
+                else:
+                    composition_entry.config(state="disabled")
+            
+            material_var.trace_add("write", toggle_composition)
+            toggle_composition()  # Initial state
+            
+        elif material_type == "Metal":
+            # Metal selection
+            tb.Label(frame, text="Metal:").pack(side=LEFT, padx=5)
+            material_var = tk.StringVar()
+            material_combo = ttk.Combobox(
+                frame,
+                textvariable=material_var,
+                values=["Ag", "Al", "Au", "Cu", "Cr", "Ni", "W", "Ti", "Be", "Pd", "Pt"],
+                width=12,
+                state="readonly"
+            )
+            material_combo.pack(side=LEFT, padx=5)
+            material_combo.set("Ag")  # Default
+            
+            # Composition entry (for alloys - though metals are usually pure here)
+            tb.Label(frame, text="Composition (%):").pack(side=LEFT, padx=5)
+            composition_entry = tb.Entry(frame, width=8, state="disabled")
+            composition_entry.pack(side=LEFT)
+            composition_entry.insert(0, "100")  # Default to pure metal
+            
+        else:  # Dielectric
+            tb.Label(frame, text="Dielectric Constant (n):").pack(side=LEFT, padx=5)
+            n_entry = tb.Entry(frame, width=8)
+            n_entry.pack(side=LEFT, padx=5)
+            n_entry.insert(0, "1.0")  # Default
+            
+            tb.Label(frame, text="Extinction Coefficient (k):").pack(side=LEFT, padx=5)
+            k_entry = tb.Entry(frame, width=8)
+            k_entry.pack(side=LEFT)
+            k_entry.insert(0, "0.0")  # Default
+        
 
     def setup_substrate_selection(self):
         # Main configuration tab
@@ -578,10 +737,33 @@ class LayerConfig:
         tb.Label(thickness_frame, text="Thickness (nm):").pack(side=LEFT)
         self.thickness_entry = tb.Entry(thickness_frame, textvariable=self.substrate_thickness, width=10)
         self.thickness_entry.pack(side=LEFT, padx=5)
-        self.thickness_entry.configure(state="disabled")
-        
+        self.thickness_entry.configure(state="disabled") 
+               
         # Trace changes to thickness
-        self.substrate_thickness.trace_add("write", self.update_substrate_thickness)
+        if hasattr(self, 'substrate_thickness'):
+            self.substrate_thickness.trace_add("write", self.update_substrate_thickness)
+
+    def enable_finite_substrate(self):
+        """Show thickness controls when user clicks the button"""
+        self.is_finite_substrate.set(True)
+        self.toggle_finite_substrate()
+        self.make_thickness_btn.grid_forget()
+
+    def toggle_finite_substrate(self):
+        """Show/hide substrate thickness controls"""
+        if self.is_finite_substrate.get():
+            # Create thickness controls if they don't exist
+            if not hasattr(self, 'substrate_thickness'):
+                self.substrate_thickness = tk.StringVar(value="100")  # Default thick substrate
+                
+                tb.Label(self.thickness_frame, text="Thickness (nm):").pack(side=LEFT)
+                self.thickness_entry = tb.Entry(self.thickness_frame, textvariable=self.substrate_thickness, width=10)
+                self.thickness_entry.pack(side=LEFT, padx=5)
+            
+            self.thickness_frame.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        else:
+            self.thickness_frame.grid_forget()
+            self.substrate_thickness = float('nan')  # Default to semi-infinite
 
     def update_substrate_thickness(self, *args):
         try:
@@ -1246,7 +1428,8 @@ class LayerConfig:
         p_radio.pack(side=LEFT, padx=5)
 
     def get_layers(self): 
-        if self.manual_layer_var.get():
+        self.update_manual_mode_state()
+        if self.manual_mode_active:
             # Process manual layers
             manual_layers = []
             for layer in self.manual_layers:
@@ -1255,90 +1438,51 @@ class LayerConfig:
                 except ValueError:
                     print(f"Warning: Invalid thickness entry. Skipping this layer.")
                     continue
-
-                materials = []
-                material_entries = []
-
-                # Get all material inputs for this layer
-                for child in layer['material_inputs'].winfo_children():
-                    if isinstance(child, tb.Frame):
-                        # Find the combo box and entry in this frame
-                        for widget in child.winfo_children():
-                            if isinstance(widget, ttk.Combobox):
-                                material = widget.get()
-                            elif isinstance(widget, tb.Entry):
-                                try:
-                                    composition = float(widget.get())
-                                    material_entries.append((material, composition))
-                                except ValueError:
-                                    print(f"Warning: Skipping invalid composition entry")
+                # Get material properties from the layer's input frame
+                material_properties = self._get_material_properties(layer)
                 
-                # Calculate total composition percentage
-                total_percent = sum(comp for _, comp in material_entries)
+                # Add each material component based on composition percentage
+                for mat_type, n, k, percent in material_properties:
+                    if percent > 0:  # Only add if composition percentage > 0
+                        sublayer_thickness = thickness * (percent / 100)
+                        manual_layers.append([sublayer_thickness, "Constant", [n, k]])
 
-                if total_percent == 0:
-                    print("Warning: Total composition is 0%. Skipping this layer.")
-                    continue
-
-                # Normalize if total isn't 100%
-                if total_percent != 100:
-                    material_entries = [(mat, (comp / total_percent) * 100) 
-                                    for mat, comp in material_entries]
-
-                # Create sublayers based on composition
-                for material, percent in material_entries:
-                    sublayer_thickness = thickness * (percent / 100)
+            # Add metal layer from manual Drude parameters if specified and enabled
+            if self.include_metal_var.get():
+                try:
+                    metal_thickness = float(self.manual_metal_thickness.get())
+                    f0 = float(self.manual_f0_var.get())
+                    gamma0 = float(self.manual_gamma0_var.get())
+                    wp = float(self.manual_wp_var.get())
                     
-                    # Handle different material types
-                    if material == "GaAs":
-                        manual_layers.append([sublayer_thickness, "Constant", [3.5, 0.0]])  # GaAs refractive index
-                    elif material == "AlGaAs":
-                        al_percent = percent  # Aluminum percentage
-                        # Calculate refractive index based on Al concentration (linear approximation)
-                        n_GaAs = 3.5
-                        n_AlAs = 2.9
-                        n_AlGaAs = n_GaAs + (n_AlAs - n_GaAs) * (al_percent/100)
-                        manual_layers.append([sublayer_thickness, "Constant", [n_AlGaAs, 0.0]])
-                    elif material in ["GaSb", "AlAsSb"]:
-                        manual_layers.append([sublayer_thickness, "Constant", f"{material}_ln"])
-                    else:
-                        manual_layers.append([sublayer_thickness, "Constant", [1.0, 0.0]])
-
-            # Add metal layer from manual Drude parameters if specified
-            try:
-                metal_thickness = float(self.manual_metal_thickness.get())
-                f0 = float(self.manual_f0_var.get())
-                gamma0 = float(self.manual_gamma0_var.get())
-                wp = float(self.manual_wp_var.get())
-                
-                metal_layer = [
-                    metal_thickness, 
-                    "Drude", 
-                    [f0, wp, gamma0]
-                ]
-                manual_layers.insert(0, metal_layer)  # Add metal layer at the beginning
-            except ValueError:
-                print("Warning: Invalid metal layer parameters - skipping")
-
-            # Substrate handling
+                    metal_layer = [metal_thickness, "Drude", [f0, wp, gamma0]]
+                    manual_layers.insert(0, metal_layer)  # Add metal layer at the beginning
+                except ValueError:
+                    print("Warning: Invalid metal layer parameters - skipping")
+                    
+            # Substrate handling for manual mode
             substrate_material = (
                 "GaSb_ln" if self.substrate_var.get() == "GaSb"
                 else "GaAs_ln" if self.substrate_var.get() == "GaAs"
                 else [1.0, 0.0] if self.substrate_var.get() == "Air"
                 else float('nan')
-            )
-            try:
-                substrate_thickness = float(self.substrate_thickness.get()) if self.is_finite_substrate.get() else float('nan')
-            except ValueError:
-                print(f"Warning: Invalid substrate thickness entry. Using NaN.")
-                substrate_thickness = float('nan')
+            )            
+            # Get substrate thickness - this was the missing part
+            substrate_thickness = float('nan')  # Default to semi-infinite
+            if self.manual_is_finite_substrate.get():
+                try:
+                    substrate_thickness = float(self.manual_substrate_thickness.get())
+                except ValueError:
+                    print(f"Warning: Invalid substrate thickness entry. Using NaN.")
+                    substrate_thickness = float('nan')
+                    
             substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
 
-            return [], manual_layers, substrate_layer
-        
+            return [], manual_layers, substrate_layer     
 
         else:
-            # Predefined DBR layer setup
+            print("Processing standard configuration")
+            # Predefined DBR layer setup with updated refractive indices
             substrate_material = (
                 "GaSb_ln" if self.substrate_var.get() == "GaSb"
                 else "GaAs_ln" if self.substrate_var.get() == "GaAs"
@@ -1362,10 +1506,146 @@ class LayerConfig:
             for _ in range(dbr_period):
                 for layer in self.dbr_layers:
                     if layer[2] == "GaSb_ln":
-                        dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
+                        dbr_stack.append([layer[0], layer[1], [3.8, 0.0]])  # Updated GaSb refractive index
                     elif layer[2] == "AlAsSb_ln":
-                        dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
+                        dbr_stack.append([layer[0], layer[1], [3.1, 0.0]])  # Updated AlAsSb refractive index
                     else:
                         dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
 
             return dbr_stack, self.metal_layers, substrate_layer
+        
+    def _get_material_properties(self, layer):
+        """Extract material properties from a layer's input frame"""
+        properties = []
+        
+        for child in layer['material_inputs'].winfo_children():
+            if isinstance(child, tb.Frame):
+                material_type = layer['type_var'].get()
+                
+                if material_type == "Semiconductor":
+                    # Get semiconductor properties
+                    for widget in child.winfo_children():
+                        if isinstance(widget, ttk.Combobox):
+                            material = widget.get()
+                        elif isinstance(widget, tb.Entry) and widget.cget("state") != "disabled":
+                            try:
+                                composition = float(widget.get())
+                            except ValueError:
+                                composition = 0
+                    
+                    # Get refractive indices based on material and composition
+                    n, k = self._get_semiconductor_refractive_index(material, composition)
+                    properties.append(("Semiconductor", n, k, composition))
+                    
+                elif material_type == "Metal":
+                    # Get metal properties
+                    for widget in child.winfo_children():
+                        if isinstance(widget, ttk.Combobox):
+                            metal = widget.get()
+                        elif isinstance(widget, tb.Entry):
+                            try:
+                                composition = float(widget.get())
+                            except ValueError:
+                                composition = 100  # Default to pure metal
+                    
+                    # Get metal optical constants
+                    n, k = self._get_metal_refractive_index(metal)
+                    properties.append(("Metal", n, k, composition))
+                    
+                elif material_type == "Dielectric":
+                    # Get dielectric properties
+                    n_entry = None
+                    k_entry = None
+                    for widget in child.winfo_children():
+                        if isinstance(widget, tb.Entry):
+                            if "Dielectric Constant" in str(widget.master.winfo_children()[0].cget("text")):
+                                n_entry = widget
+                            elif "Extinction Coefficient" in str(widget.master.winfo_children()[0].cget("text")):
+                                k_entry = widget
+                    
+                    try:
+                        n = float(n_entry.get()) if n_entry else 1.0
+                        k = float(k_entry.get()) if k_entry else 0.0
+                        properties.append(("Dielectric", n, k, 100))  # 100% composition
+                    except ValueError:
+                        print("Warning: Invalid dielectric constants - using n=1.0, k=0.0")
+                        properties.append(("Dielectric", 1.0, 0.0, 100))
+        
+        return properties
+
+    def _get_semiconductor_refractive_index(self, material, composition):
+        """Return refractive index (n,k) for semiconductor materials with composition dependence"""
+        # Convert composition percentage to fraction (0-1)
+        x = composition / 100.0
+        
+        if material == "GaAs":
+            # Pure GaAs from Adachi 1989
+            return (3.3, 0.0)  # n=3.3, k=0 at ~2.0 eV
+            
+        elif material == "AlGaAs":
+            # Al(x)Ga(1-x)As - using Adachi 1989 model with interpolation
+            # Parameters for x=0 (GaAs) and x=0.315 from Adachi
+            # Linear interpolation between these points
+            
+            # GaAs (x=0) parameters
+            n_GaAs = 3.3
+            k_GaAs = 0.0
+            
+            # Al0.315Ga0.685As parameters from Adachi
+            n_Al315 = 2.9  # Approximate value at 2.0 eV from the plot
+            k_Al315 = 0.0
+            
+            # Linear interpolation
+            n = n_GaAs + (n_Al315 - n_GaAs) * (x / 0.315)
+            k = k_GaAs + (k_Al315 - k_GaAs) * (x / 0.315)
+            
+            return (n, k)
+            
+        elif material == "GaSb":
+            # Pure GaSb from Adachi 1989
+            return (3.8, 0.0)  # n=3.8 at ~1.5 eV
+            
+        elif material == "AlAsSb":
+            # AlAs(x)Sb(1-x) - using similar approach as AlGaAs
+            # For simplicity, we'll approximate based on GaSb and AlSb
+            
+            # GaSb parameters
+            n_GaSb = 3.8
+            k_GaSb = 0.0
+            
+            # AlSb parameters (approximate)
+            n_AlSb = 3.1  # Rough estimate
+            k_AlSb = 0.0
+            
+            # Linear interpolation
+            n = n_GaSb + (n_AlSb - n_GaSb) * x
+            k = k_GaSb + (k_AlSb - k_GaSb) * x
+            
+            return (n, k)
+            
+        else:
+            return (1.0, 0.0)  # Default for unknown materials
+
+    def _get_metal_refractive_index(self, metal):
+        """Return refractive index (n,k) for common metals"""
+        # These are example values at specific wavelengths - you should replace with proper data
+        metal_indices = {
+            "Ag": (0.15, 3.5),   # Silver at 600nm
+            "Al": (1.5, 7.0),    # Aluminum at 600nm
+            "Au": (0.2, 3.0),    # Gold at 600nm
+            "Cu": (0.6, 2.5),    # Copper at 600nm
+            # Add more metals as needed
+        }
+        return metal_indices.get(metal, (1.0, 0.0))  # Default if metal not found
+
+    def _get_substrate_properties(self):
+        """Return substrate optical properties"""
+        substrate = self.substrate_var.get()
+        if substrate == "GaSb":
+            return [3.816, 0.0]
+        elif substrate == "GaAs":
+            return [3.3, 0.0]
+        elif substrate == "Air":
+            return [1.0, 0.0]
+        else:
+            return float('nan')
