@@ -251,7 +251,7 @@ class LayerConfig:
         
         # Thickness entry for substrate
         self.manual_substrate_thickness = tk.StringVar(value="0")
-        tb.Label(self.substrate_frame, text="Thickness (nm):").grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        tb.Label(self.substrate_frame, text="Thickness (μm):").grid(row=0, column=3, padx=5, pady=5, sticky="w")
         self.substrate_thickness_entry = tb.Entry(
             self.substrate_frame, 
             textvariable=self.manual_substrate_thickness, 
@@ -974,46 +974,71 @@ class LayerConfig:
         )
         add_btn.grid(row=2, column=0, columnspan=2, pady=5)
         
-        # Number of periods
-        tb.Label(self.dbr_frame, text="Number of Periods:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        # Number of periods for selected layers
+        tb.Label(self.dbr_frame, text="Periods for Selection:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
         self.dbr_period_entry = tb.Entry(self.dbr_frame, width=10)
-        self.dbr_period_entry.insert(0, self.settings["dbr_period"])
+        self.dbr_period_entry.insert(0, "1")
         self.dbr_period_entry.grid(row=3, column=1, padx=5, pady=5, sticky="w")
         
-        # Set period button
+        # Set period for selected layers button
         period_btn = tb.Button(
             self.dbr_frame,
-            text="Set DBR Period",
+            text="Set Period for Selection",
             command=self.set_dbr_period,
             bootstyle="info"
         )
         period_btn.grid(row=4, column=0, columnspan=2, pady=5)
         
-        # DBR layer list
+        # DBR layer list with multiple selection enabled
         self.dbr_layer_list = tk.Listbox(
             self.dbr_frame,
             height=5,
             width=40,
             bg="white",
             fg="black",
-            selectbackground="#4A90E2"
+            selectbackground="#4A90E2",
+            selectmode=tk.MULTIPLE  # Allow multiple selection
         )
         self.dbr_layer_list.grid(row=5, column=0, columnspan=2, pady=10)
         
-        # Clear button
+        # Button frame for delete and clear
+        button_frame = tb.Frame(self.dbr_frame)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=5)
+        
+        # Delete selected button
+        delete_btn = tb.Button(
+            button_frame,
+            text="Delete Selected",
+            command=self.delete_selected_dbr_layers,
+            bootstyle="danger"
+        )
+        delete_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Clear all button
         clear_btn = tb.Button(
-            self.dbr_frame,
-            text="Clear DBR Layers",
+            button_frame,
+            text="Clear All",
             command=self.clear_dbr_layers,
             bootstyle="danger"
         )
-        clear_btn.grid(row=6, column=0, columnspan=2, pady=5)
+        clear_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Initialize layer groups storage
+        self.dbr_layer_groups = []
+        self.current_group_id = 0
 
     def add_dbr_layer(self):
         try:
             thickness = float(self.dbr_thickness_entry.get())
             material = self.dbr_material_var.get()
-            layer = [thickness, "Constant", "GaSb_ln" if material == "GaSb" else "AlAsSb_ln"]
+            layer = {
+                'id': self.current_group_id,
+                'thickness': thickness,
+                'material': material,
+                'type': "Constant",
+                'refractive_index': "GaSb_ln" if material == "GaSb" else "AlAsSb_ln"
+            }
+            self.current_group_id += 1
             self.dbr_layers.append(layer)
             self.dbr_layer_list.insert(tk.END, f"{material} - {thickness} nm")
         except ValueError:
@@ -1021,38 +1046,92 @@ class LayerConfig:
 
     def set_dbr_period(self):
         try:
-            dbr_period = int(self.dbr_period_entry.get())
-            self.settings["dbr_period"] = dbr_period
-            dbr_stack = []
+            selected_indices = self.dbr_layer_list.curselection()
+            if not selected_indices:
+                messagebox.showwarning("Warning", "Please select layers to repeat")
+                return
+                
+            period = int(self.dbr_period_entry.get())
+            if period < 1:
+                messagebox.showerror("Error", "Period must be at least 1")
+                return
+                
+            # Get the selected layers
+            selected_layers = [self.dbr_layers[i] for i in selected_indices]
             
-            for _ in range(dbr_period):
-                for layer in self.dbr_layers:
-                    if layer[2] == "GaSb_ln":
-                        dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
-                    elif layer[2] == "AlAsSb_ln":
-                        dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
-                    else:
-                        dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
+            # Create a new group with these layers and the period
+            group = {
+                'layers': selected_layers,
+                'period': period
+            }
+            self.dbr_layer_groups.append(group)
             
-            self.dbr_stack = dbr_stack
+            # Rebuild the DBR stack
+            self.rebuild_dbr_stack()
             
             # Update status message
-            if hasattr(self, "dbr_message_label"):
-                self.dbr_message_label.config(text=f"DBR Stack: {len(dbr_stack)} layers")
-            else:
-                self.dbr_message_label = tb.Label(
-                    self.dbr_frame,
-                    text=f"DBR Stack: {len(dbr_stack)} layers",
-                    bootstyle="success"
-                )
-                self.dbr_message_label.grid(row=7, column=0, columnspan=2, pady=5)
-                
+            self.update_dbr_status_message()
+            
         except ValueError:
             messagebox.showerror("Error", "Please enter a valid number of periods")
+
+    def rebuild_dbr_stack(self):
+        self.dbr_stack = []
+        
+        for group in self.dbr_layer_groups:
+            for _ in range(group['period']):
+                for layer in group['layers']:
+                    if layer['refractive_index'] == "GaSb_ln":
+                        self.dbr_stack.append([layer['thickness'], layer['type'], [3.816, 0.0]])
+                    elif layer['refractive_index'] == "AlAsSb_ln":
+                        self.dbr_stack.append([layer['thickness'], layer['type'], [3.101, 0.0]])
+                    else:
+                        self.dbr_stack.append([layer['thickness'], layer['type'], [1.0, 0.0]])
+
+    def update_dbr_status_message(self):
+        total_layers = len(self.dbr_stack)
+        group_info = ", ".join([f"{len(g['layers'])}×{g['period']}" for g in self.dbr_layer_groups])
+        
+        if hasattr(self, "dbr_message_label"):
+            self.dbr_message_label.config(text=f"DBR Stack: {total_layers} layers ({group_info})")
+        else:
+            self.dbr_message_label = tb.Label(
+                self.dbr_frame,
+                text=f"DBR Stack: {total_layers} layers ({group_info})",
+                bootstyle="success"
+            )
+            self.dbr_message_label.grid(row=7, column=0, columnspan=2, pady=5)
+
+    def delete_selected_dbr_layers(self):
+        selected_indices = self.dbr_layer_list.curselection()
+        if not selected_indices:
+            messagebox.showwarning("Warning", "Please select layers to delete")
+            return
+            
+        # Delete from the list (starting from the end to avoid index shifting)
+        for i in sorted(selected_indices, reverse=True):
+            deleted_layer = self.dbr_layers.pop(i)
+            self.dbr_layer_list.delete(i)
+            
+            # Remove this layer from any groups
+            for group in self.dbr_layer_groups[:]:
+                group['layers'] = [l for l in group['layers'] if l['id'] != deleted_layer['id']]
+                if not group['layers']:
+                    self.dbr_layer_groups.remove(group)
+        
+        # Rebuild the stack if we deleted something
+        if selected_indices:
+            self.rebuild_dbr_stack()
+            self.update_dbr_status_message()
 
     def clear_dbr_layers(self):
         self.dbr_layers.clear()
         self.dbr_layer_list.delete(0, tk.END)
+        self.dbr_layer_groups.clear()
+        self.dbr_stack = []
+        
+        if hasattr(self, "dbr_message_label"):
+            self.dbr_message_label.config(text="DBR Stack: 0 layers")
 
     def setup_metal_layers(self):
         # Metal layers section
@@ -1097,6 +1176,32 @@ class LayerConfig:
         self.unknown_f0_entry = tb.Entry(f0_frame, textvariable=self.f0_var, width=8)
         self.unknown_f0_entry.pack(side=LEFT, padx=5)
         
+        # Add increment/decrement buttons for f0
+        f0_btn_frame = tb.Frame(f0_frame)
+        f0_btn_frame.pack(side=LEFT, padx=2)
+        
+        def increment_f0():
+            self.f0_var.set(round(self.f0_var.get() + 0.1, 1))
+        
+        def decrement_f0():
+            self.f0_var.set(round(max(0, self.f0_var.get() - 0.1), 1))
+        
+        tb.Button(
+            f0_btn_frame, 
+            text="▲", 
+            command=increment_f0,
+            bootstyle="light",
+            width=2
+        ).pack(side=TOP)
+        
+        tb.Button(
+            f0_btn_frame, 
+            text="▼", 
+            command=decrement_f0,
+            bootstyle="light",
+            width=2
+        ).pack(side=BOTTOM)
+        
         f0_slider = tb.Scale(
             f0_frame,
             from_=0,
@@ -1104,7 +1209,7 @@ class LayerConfig:
             value=1.0,
             orient=HORIZONTAL,
             variable=self.f0_var,
-            command=lambda val: self.update_unknown_metal_display(),
+            command=lambda val: self.update_unknown_metal_params(),
             bootstyle="warning"
         )
         f0_slider.pack(side=LEFT, fill=X, expand=True)
@@ -1117,6 +1222,32 @@ class LayerConfig:
         self.unknown_gamma0_entry = tb.Entry(gamma0_frame, textvariable=self.gamma0_var, width=8)
         self.unknown_gamma0_entry.pack(side=LEFT, padx=5)
         
+        # Add increment/decrement buttons for gamma0
+        gamma0_btn_frame = tb.Frame(gamma0_frame)
+        gamma0_btn_frame.pack(side=LEFT, padx=2)
+        
+        def increment_gamma0():
+            self.gamma0_var.set(round(self.gamma0_var.get() + 0.1, 1))
+        
+        def decrement_gamma0():
+            self.gamma0_var.set(round(max(0, self.gamma0_var.get() - 0.1), 1))
+        
+        tb.Button(
+            gamma0_btn_frame, 
+            text="▲", 
+            command=increment_gamma0,
+            bootstyle="light",
+            width=2
+        ).pack(side=TOP)
+        
+        tb.Button(
+            gamma0_btn_frame, 
+            text="▼", 
+            command=decrement_gamma0,
+            bootstyle="light",
+            width=2
+        ).pack(side=BOTTOM)
+        
         gamma0_slider = tb.Scale(
             gamma0_frame,
             from_=0,
@@ -1124,7 +1255,7 @@ class LayerConfig:
             value=0.1,
             orient=HORIZONTAL,
             variable=self.gamma0_var,
-            command=lambda val: self.update_unknown_metal_display(),
+            command=lambda val: self.update_unknown_metal_params(),
             bootstyle="warning"
         )
         gamma0_slider.pack(side=LEFT, fill=X, expand=True)
@@ -1137,6 +1268,32 @@ class LayerConfig:
         self.unknown_wp_entry = tb.Entry(wp_frame, textvariable=self.wp_var, width=8)
         self.unknown_wp_entry.pack(side=LEFT, padx=5)
         
+        # Add increment/decrement buttons for wp
+        wp_btn_frame = tb.Frame(wp_frame)
+        wp_btn_frame.pack(side=LEFT, padx=2)
+        
+        def increment_wp():
+            self.wp_var.set(round(self.wp_var.get() + 0.1, 1))
+        
+        def decrement_wp():
+            self.wp_var.set(round(max(0, self.wp_var.get() - 0.1), 1))
+        
+        tb.Button(
+            wp_btn_frame, 
+            text="▲", 
+            command=increment_wp,
+            bootstyle="light",
+            width=2
+        ).pack(side=TOP)
+        
+        tb.Button(
+            wp_btn_frame, 
+            text="▼", 
+            command=decrement_wp,
+            bootstyle="light",
+            width=2
+        ).pack(side=BOTTOM)
+        
         wp_slider = tb.Scale(
             wp_frame,
             from_=0,
@@ -1144,16 +1301,16 @@ class LayerConfig:
             value=9.0,
             orient=HORIZONTAL,
             variable=self.wp_var,
-            command=lambda val: self.update_unknown_metal_display(),
+            command=lambda val: self.update_unknown_metal_params(),
             bootstyle="warning"
         )
         wp_slider.pack(side=LEFT, fill=X, expand=True)
         
         # Real-time updates
-        self.f0_var.trace_add("write", lambda *args: self.update_unknown_metal_display())
-        self.gamma0_var.trace_add("write", lambda *args: self.update_unknown_metal_display())
-        self.wp_var.trace_add("write", lambda *args: self.update_unknown_metal_display())
-        self.unknown_thickness_entry.bind("<KeyRelease>", lambda e: self.update_unknown_metal_display())
+        self.f0_var.trace_add("write", lambda *args: self.update_unknown_metal_params())
+        self.gamma0_var.trace_add("write", lambda *args: self.update_unknown_metal_params())
+        self.wp_var.trace_add("write", lambda *args: self.update_unknown_metal_params())
+        self.unknown_thickness_entry.bind("<KeyRelease>", lambda e: self.update_unknown_metal_params())
         
         # Standard Metal Frame (hidden by default)
         self.standard_metal_frame = tb.Frame(self.metal_frame)
@@ -1181,27 +1338,6 @@ class LayerConfig:
         self.metal_frame.grid_rowconfigure(1, weight=1)
         self.metal_frame.grid_columnconfigure(0, weight=1)
 
-    def update_unknown_metal_display(self):
-        """Update plot in real-time when parameters change"""
-        try:
-            thickness = float(self.unknown_thickness_entry.get())
-            f0 = float(self.f0_var.get())
-            gamma0 = float(self.gamma0_var.get())
-            wp = float(self.wp_var.get())
-            
-            # Update the metal layers immediately
-            layer = [thickness, "Drude", [f0, wp, gamma0]]
-            self.metal_layers = [layer]
-            
-            # If we have a plotter and reflectance is already plotted, update it
-            if self.plotter and hasattr(self.plotter, 'current_plot'):
-                angle = float(self.angle_entry.get())
-                polarization = self.polarization_var.get()
-                self.plot_reflectance()  # This will use the updated parameters
-                
-        except ValueError:
-            pass  # Ignore invalid inputs during typing
-
     def toggle_unknown_metal(self):
         if self.unknown_metal_var.get():
             # Show unknown metal options
@@ -1218,7 +1354,7 @@ class LayerConfig:
             self.metal_layers = [layer]
             
             # Update plot immediately
-            self.update_unknown_metal_display()
+            self.update_unknown_metal_params()
         else:
             # Show standard metal options
             self.unknown_metal_frame.grid_forget()
@@ -1239,9 +1375,6 @@ class LayerConfig:
         layer = [thickness, "Drude", [f0, wp, gamma0]]
         self.metal_layers = [layer]  # Replace any existing layers
         
-      # Show confirmation
-        messagebox.showinfo("Success", "Drude parameters updated successfully!")
-        print("Updated Drude Parameters:", self.settings["metal_layers"])
 
     def fit_drude_to_data(self):
         """Fit Drude parameters to match the raw reflectance data"""
@@ -1623,8 +1756,7 @@ class LayerConfig:
             return [], manual_layers, substrate_layer     
 
         else:
-            print("Processing standard configuration")
-            # Predefined DBR layer setup with updated refractive indices
+            # Predefined DBR layer setup
             substrate_material = (
                 "GaSb_ln" if self.substrate_var.get() == "GaSb"
                 else "GaAs_ln" if self.substrate_var.get() == "GaAs"
@@ -1645,16 +1777,43 @@ class LayerConfig:
                 dbr_period = 0
 
             dbr_stack = []
-            for _ in range(dbr_period):
-                for layer in self.dbr_layers:
-                    if layer[2] == "GaSb_ln":
-                        dbr_stack.append([layer[0], layer[1], [3.8, 0.0]])  # Updated GaSb refractive index
-                    elif layer[2] == "AlAsSb_ln":
-                        dbr_stack.append([layer[0], layer[1], [3.1, 0.0]])  # Updated AlAsSb refractive index
+            for layer in self.dbr_layers:
+                if isinstance(layer, dict):  # Check if layer is a dictionary
+                    material = layer.get('material', '')
+                    thickness = layer.get('thickness', 0)
+                    layer_type = layer.get('type', 'Constant')
+                    
+                    if material == "GaSb":
+                        dbr_stack.append([thickness, layer_type, [3.816, 0.0]])
+                    elif material == "AlAsSb":
+                        dbr_stack.append([thickness, layer_type, [3.101, 0.0]])
+                    else:
+                        dbr_stack.append([thickness, layer_type, [1.0, 0.0]])
+                else:  # Handle legacy list format
+                    if len(layer) >= 3 and layer[2] == "GaSb_ln":
+                        dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
+                    elif len(layer) >= 3 and layer[2] == "AlAsSb_ln":
+                        dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
                     else:
                         dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
 
-            return dbr_stack, self.metal_layers, substrate_layer
+            # Repeat the DBR stack for the specified number of periods
+            dbr_stack = dbr_stack * dbr_period if dbr_period > 0 else []
+
+            # Metal layers handling
+            metal_layers = []
+            if self.unknown_metal_var.get():
+                try:
+                    thickness = float(self.unknown_thickness_entry.get())
+                    f0 = float(self.f0_var.get())
+                    wp = float(self.wp_var.get())
+                    gamma0 = float(self.gamma0_var.get())
+                    metal_layers = [[thickness, "Drude", [f0, wp, gamma0]]]
+                except ValueError:
+                    print("Warning: Invalid metal layer parameters - skipping")
+
+            return dbr_stack, metal_layers, substrate_layer
+
 
     def _get_material_properties(self, layer):
         """Extract material properties from a layer's input frame"""

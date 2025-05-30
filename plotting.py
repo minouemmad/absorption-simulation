@@ -9,6 +9,8 @@ from utils import load_settings, save_settings
 import Funcs as MF
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tkinter import BOTH
+import ttkbootstrap as tb
+
 
 class PlotReflectance:
     def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, 
@@ -46,6 +48,63 @@ class PlotReflectance:
 
     def setup_plots(self, right_frame):
         """Initialize the matplotlib figures and canvas"""
+        # Create a container frame for the plot and controls
+        plot_container = tk.Frame(right_frame)
+        plot_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Create control buttons frame
+        control_frame = tk.Frame(plot_container)
+        control_frame.pack(fill=tk.X, pady=5)
+        
+        # Add toggle buttons for absorption and axis controls
+        self.show_absorption_var = tk.BooleanVar(value=True)
+        absorption_btn = tb.Checkbutton(
+            control_frame,
+            text="Show Absorption",
+            variable=self.show_absorption_var,
+            bootstyle="primary-round-toggle",
+            command=self.toggle_absorption
+        )
+        absorption_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Axis scaling controls
+        tb.Label(control_frame, text="X Range:").pack(side=tk.LEFT, padx=5)
+        self.xmin_entry = tb.Entry(control_frame, width=5)
+        self.xmin_entry.insert(0, "2.5")
+        self.xmin_entry.pack(side=tk.LEFT)
+        
+        tb.Label(control_frame, text="to").pack(side=tk.LEFT)
+        self.xmax_entry = tb.Entry(control_frame, width=5)
+        self.xmax_entry.insert(0, "12")
+        self.xmax_entry.pack(side=tk.LEFT)
+        
+        tb.Label(control_frame, text="Y Range:").pack(side=tk.LEFT, padx=5)
+        self.ymin_entry = tb.Entry(control_frame, width=5)
+        self.ymin_entry.insert(0, "0")
+        self.ymin_entry.pack(side=tk.LEFT)
+        
+        tb.Label(control_frame, text="to").pack(side=tk.LEFT)
+        self.ymax_entry = tb.Entry(control_frame, width=5)
+        self.ymax_entry.insert(0, "1")
+        self.ymax_entry.pack(side=tk.LEFT)
+        
+        apply_btn = tb.Button(
+            control_frame,
+            text="Apply Axis",
+            command=self.apply_axis_ranges,
+            bootstyle="info"
+        )
+        apply_btn.pack(side=tk.LEFT, padx=5)
+        
+        reset_btn = tb.Button(
+            control_frame,
+            text="Reset Axis",
+            command=self.reset_axis_ranges,
+            bootstyle="secondary"
+        )
+        reset_btn.pack(side=tk.LEFT)
+        
+        # Create the figure and axes
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={'height_ratios': [2, 1]})
         self.fig.tight_layout(pad=3.0)
         
@@ -69,8 +128,58 @@ class PlotReflectance:
         self.ax2.set_title("Electric Field Decay")
         self.ax2.grid(alpha=0.2)
         
-        self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
-        self.canvas.get_tk_widget().pack(fill=BOTH, expand=True)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=plot_container)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def toggle_absorption(self):
+        """Toggle absorption curve visibility"""
+        if hasattr(self, 'ax1'):
+            for line in self.ax1.get_lines():
+                if line.get_label() == 'Absorption':
+                    line.set_visible(self.show_absorption_var.get())
+            self.canvas.draw_idle()
+
+    def apply_axis_ranges(self):
+        """Apply custom axis ranges"""
+        try:
+            xmin = float(self.xmin_entry.get())
+            xmax = float(self.xmax_entry.get())
+            ymin = float(self.ymin_entry.get())
+            ymax = float(self.ymax_entry.get())
+            
+            if xmin >= xmax or ymin >= ymax:
+                raise ValueError("Invalid range values")
+                
+            self.ax1.set_xlim(xmin, xmax)
+            self.ax1.set_ylim(ymin, ymax)
+            
+            # Update ticks for better readability
+            x_ticks = np.linspace(xmin, xmax, num=min(11, int(xmax-xmin)+1))
+            y_ticks = np.linspace(ymin, ymax, num=11)
+            
+            self.ax1.set_xticks(x_ticks)
+            self.ax1.set_yticks(y_ticks)
+            
+            self.canvas.draw_idle()
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid axis range: {str(e)}")
+
+    def reset_axis_ranges(self):
+        """Reset axis ranges to defaults"""
+        self.xmin_entry.delete(0, tk.END)
+        self.xmin_entry.insert(0, "2.5")
+        self.xmax_entry.delete(0, tk.END)
+        self.xmax_entry.insert(0, "12")
+        self.ymin_entry.delete(0, tk.END)
+        self.ymin_entry.insert(0, "0")
+        self.ymax_entry.delete(0, tk.END)
+        self.ymax_entry.insert(0, "1")
+        
+        self.ax1.set_xlim(2.5, 12)
+        self.ax1.set_ylim(0.0, 1.0)
+        self.ax1.set_xticks(np.arange(2, 13, 1))
+        self.ax1.set_yticks(np.linspace(0.0, 1.0, 11))
+        self.canvas.draw_idle()
 
     def update_unknown_metal_params(self, thickness, f0, gamma0, wp):
         """Update the unknown metal parameters and refresh plot"""
@@ -212,26 +321,43 @@ class PlotReflectance:
         if isinstance(raw_data, str):
             try:
                 raw_data = pd.read_csv(raw_data, header=None, names=["wavelength", "reflectance"],
-                                     delimiter=",", engine="python")
+                                    delimiter=",", engine="python")
             except Exception as e:
                 raise ValueError(f"Failed to load file: {e}")
         elif not isinstance(raw_data, pd.DataFrame):
             raise TypeError("raw_data should be a pandas DataFrame or a CSV file path.")
-    
+
         # Process data
         raw_data['wavelength'] = pd.to_numeric(raw_data['wavelength'], errors='coerce')
         raw_data['reflectance'] = pd.to_numeric(raw_data['reflectance'], errors='coerce')
         raw_data = raw_data.dropna(subset=['wavelength', 'reflectance'])
         
-        # Filter to our range of interest
+        # Detect and convert wavelength units
+        median_wavelength = raw_data['wavelength'].median()
+        
+        if median_wavelength > 10000:  # Values in nm (e.g. 10000nm = 10μm)
+            raw_data['wavelength'] = raw_data['wavelength'] / 10000
+            messagebox.showinfo("Unit Conversion", 
+                            "Detected wavelength values in nanometers. Automatically converted to microns (divided by 10000).")
+        elif median_wavelength > 100:  # Values in 0.1nm or some other unit (e.g. 400 = 4μm)
+            raw_data['wavelength'] = raw_data['wavelength'] / 100
+            messagebox.showinfo("Unit Conversion", 
+                            "Detected wavelength values in 0.1nm units. Automatically converted to microns (divided by 100).")
+        elif median_wavelength > 10:  # Values might already be in microns
+            pass  # Assume already in microns
+        else:
+            messagebox.showinfo("Data Uploaded", 
+                                "Successfully Uploaded data")
+        
+        # Filter to our range of interest (2.5-12 microns)
         min_wavelength = max(2.5, raw_data['wavelength'].min())
         max_wavelength = min(12, raw_data['wavelength'].max())
         filtered_data = raw_data[(raw_data['wavelength'] >= min_wavelength) &
-                               (raw_data['wavelength'] <= max_wavelength)]
-    
+                            (raw_data['wavelength'] <= max_wavelength)]
+
         if filtered_data.empty:
-            raise ValueError("No data points found in the specified wavelength range (2.5–12 µm).")
-    
+            raise ValueError(f"No data points found in the specified wavelength range (2.5–12 µm). Data range: {raw_data['wavelength'].min():.2f}-{raw_data['wavelength'].max():.2f} µm")
+
         # Handle duplicates and smooth
         filtered_data = filtered_data.groupby("wavelength", as_index=False)["reflectance"].mean()
         smooth_wavelengths = np.linspace(filtered_data['wavelength'].min(),
@@ -239,14 +365,14 @@ class PlotReflectance:
         smooth_reflectance = make_interp_spline(
             filtered_data['wavelength'], filtered_data['reflectance'], k=3
         )(smooth_wavelengths)
-    
+
         # Plot with a distinct color (green in this case)
         self.raw_data_line, = ax.plot(
             smooth_wavelengths, smooth_reflectance, 
             label="Raw Data", 
-            color="green",  # Changed from blue to green
+            color="green",
             linewidth=1.5,
-            linestyle="--"  # Added dashed line for better distinction
+            linestyle="--"
         )
         
         # Update legend
@@ -254,10 +380,17 @@ class PlotReflectance:
         ax.legend(handles, labels)
         
         canvas.draw()
-
+        self.raw_data = raw_data  # Store the processed data
+            
     def plot_stack(self, angle, polarization, ax, canvas):
         try:
-            ax.clear()
+            # Don't clear the entire axis - just remove the simulated plots
+            for line in ax.get_lines():
+                if line.get_label() in ['Reflectance', 
+                                    'Absorption',
+                                    'Reflectance',
+                                    'Absorption']:
+                    line.remove()
             
             # Validate and process layers
             if not self.metal_layers and not self.dbr_stack:
@@ -273,6 +406,7 @@ class PlotReflectance:
                 else:
                     substrate_material[0][2] = [1.0, 0.0]
             substrate_thickness = float(self.substrate_thickness)
+            
             # Build layer structure
             Ls_structure = (
                 [[np.nan, "Constant", [1.0, 0.0]]] +
@@ -301,13 +435,16 @@ class PlotReflectance:
                 R0 = (abs(rp))**2
                 T0 = np.real(Tp)
                 Abs1 = 1.0 - R0 - T0
-                
+            else:  # "both"
+                R0 = 0.5 * ((abs(rs))**2 + (abs(rp))**2)
+                Abs1 = 1 - R0 - (0.5 * (np.real(Ts) + np.real(Tp)))
+            
             if not np.isnan(substrate_thickness) and substrate_thickness > 0:
                 print("Finite substrate thickness in microns: " + str(substrate_thickness/1000))
                 R_finite = np.zeros_like(R0)
 
                 # in microns
-                substrate_thickness=substrate_thickness/1000
+                substrate_thickness = substrate_thickness/1000
 
                 # Define valid wavelength range (2 µm to 12 µm)
                 valid_range = (wavelength_microns >= 2) & (wavelength_microns <= 12)
@@ -332,28 +469,40 @@ class PlotReflectance:
                 R_finite = 0.33 + (0.67 ** 2) * R_finite
                 Abs1 = 1.0 - R_finite - T0
 
-                ax.plot(wavelength_microns, R_finite, label='Reflectance (Finite Substrate)', color='green')
-                ax.plot(wavelength_microns, Abs1, label='Absorption (Finite Substrate)', color='red')
-
-
-            else:    
-                # Plot results
-                ax.plot(wavelength_microns, R0, label='Reflectance (Semi-Infinite Substrate)', color='blue')
-                ax.plot(wavelength_microns, Abs1, label='Absorption (Semi-Infinite Substrate)', color='red')
-                ax.legend()
+                reflectance_line, = ax.plot(wavelength_microns, R_finite, 
+                                        label='Reflectance', 
+                                        color='blue')
                 
-            # Reset plot properties
+                absorption_line, = ax.plot(wavelength_microns, Abs1, 
+                                        label='Absorption', 
+                                        color='red',
+                                        visible=self.show_absorption_var.get())
+            else:    
+                reflectance_line, = ax.plot(wavelength_microns, R0, 
+                                        label='Reflectance', 
+                                        color='blue')
+                
+                absorption_line, = ax.plot(wavelength_microns, Abs1, 
+                                        label='Absorption', 
+                                        color='red',
+                                        visible=self.show_absorption_var.get())
+            
+            # Update legend to include both raw and simulated data
+            handles, labels = ax.get_legend_handles_labels()
+            ax.legend(handles, labels)
+            
+            # Reset plot properties (preserving any existing raw data)
             ax.set_xticks(np.arange(2, 13, 1))
             ax.set_yticks(np.linspace(0.0, 1.0, 11))
-            ax.set_xlim(2.5, 12)
-            ax.set_ylim(0.0, 1.0)
+            ax.set_xlim(float(self.xmin_entry.get()), float(self.xmax_entry.get()))
+            ax.set_ylim(float(self.ymin_entry.get()), float(self.ymax_entry.get()))
             ax.set_xlabel("Wavelength (μm)")
             ax.set_ylabel("Reflectance")
-            ax.set_title("Simulated Reflectance")
+            ax.set_title("Simulated and Raw Reflectance")
             ax.grid(alpha=0.2)
             
             canvas.draw()
-            
+
             # Store current plot state
             self.current_plot = {
                 'angle': angle,
@@ -365,6 +514,7 @@ class PlotReflectance:
         except Exception as e:
             print(f"Error in plot_stack: {e}")
             messagebox.showerror("Plot Error", f"Failed to plot reflectance: {str(e)}")
+
 
     def store_plot_state(self, angle, polarization, ax, canvas):
         """Store the current plot parameters for updates"""
