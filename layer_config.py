@@ -24,8 +24,6 @@ class LayerConfig:
         self.dbr_layers = settings["dbr_layers"]
         self.metal_layers = settings["metal_layers"]
         
-        self.drude_cache = {}  # Cache for precomputed results
-        self.initialize_drude_lookup_table()
         self.cancel_fitting_flag = False  # For tracking cancellation
         self.fit_progress_value = 0  # For progress tracking
         self.fit_status_message = ""  # For status updates
@@ -65,12 +63,12 @@ class LayerConfig:
         self.main_container = tb.Frame(root)
         self.main_container.pack(fill=BOTH, expand=True)
         
-        # Create paned window for left/right split
+        # Create paned window for left/right split with equal initial sizes
         self.paned = tb.PanedWindow(self.main_container, orient=HORIZONTAL)
         self.paned.pack(fill=BOTH, expand=True)
         
-        # Left panel (controls) with scrollbar
-        self.left_container = tb.Frame(self.paned)
+        # Left panel (controls) with scrollbar - now with fixed minimum width
+        self.left_container = tb.Frame(self.paned, width=400)  # Set initial width
         self.left_canvas = tk.Canvas(self.left_container)
         self.left_scroll = tb.Scrollbar(self.left_container, orient=VERTICAL, command=self.left_canvas.yview)
         self.left_canvas.configure(yscrollcommand=self.left_scroll.set)
@@ -84,17 +82,18 @@ class LayerConfig:
         self.left_frame.bind("<Configure>", lambda e: self.left_canvas.configure(
             scrollregion=self.left_canvas.bbox("all")))
         
-        # Right panel (plots)
-        self.right_frame = tb.Frame(self.paned)
-        self.paned.add(self.left_container)
-        self.paned.add(self.right_frame)
+        # Right panel (plots) - same initial size as left panel
+        self.right_frame = tb.Frame(self.paned, width=400)
+        
+        # Add frames to paned window with equal weights
+        self.paned.add(self.left_container, weight=1)
+        self.paned.add(self.right_frame, weight=1)
         
         # Bind mousewheel for scrolling
         self.left_canvas.bind_all("<MouseWheel>", lambda e: self.left_canvas.yview_scroll(-1*(e.delta//120), "units"))
         
         # Remove native window decorations for modern look
         self.root.overrideredirect(False)
-
 
         # Initialize UI sections
         self.setup_gui()
@@ -321,34 +320,154 @@ class LayerConfig:
             if repeat_times < 1:
                 raise ValueError("Repeat times must be at least 1")
                 
-            # Get indices of selected layers
-            selected_indices = [
-                i for i, layer in enumerate(self.manual_layers) 
-                if layer['select_var'].get()
-            ]
+            # Get selected layers (working with a copy to avoid modification during iteration)
+            selected_layers = [layer for layer in self.manual_layers if layer['select_var'].get()]
             
-            if not selected_indices:
+            if not selected_layers:
                 messagebox.showwarning("No Selection", "No layers selected for repeating")
                 return
                 
-            # Create copies of selected layers
-            new_layers = []
-            for i in selected_indices:
-                original_layer = self.manual_layers[i]
-                for _ in range(repeat_times):
-                    # Create a copy of the layer
-                    new_layer = self.add_manual_layer()
-                    # Copy all properties from original layer
+            # Store the original layer count
+            original_count = len(self.manual_layers)
+            
+            # For each repeat iteration
+            for _ in range(repeat_times):
+                # For each selected layer, create a copy
+                for original_idx, original_layer in enumerate(selected_layers):
+                    # Create a new layer (this will automatically add it to manual_layers)
+                    new_layer = self.add_manual_layer(skip_pack=True)
+                    
+                    # Copy basic properties
                     new_layer['type_var'].set(original_layer['type_var'].get())
                     new_layer['thickness_entry'].delete(0, tk.END)
                     new_layer['thickness_entry'].insert(0, original_layer['thickness_entry'].get())
-                    # Update material inputs (this is more complex and might need additional handling)
-                    self.update_material_inputs(new_layer['frame'])
                     
+                    # Copy all material properties
+                    self._copy_material_properties(original_layer, new_layer)
+                    
+                    # Pack the new layer frame (we skipped this in add_manual_layer)
+                    new_layer['frame'].pack(fill=X, pady=5, padx=5)
+                    
+                    # Unselect the new layer
+                    new_layer['select_var'].set(False)
+            
+            # Update the display
+            self.update_layer_numbers()
+            self.layers_canvas.configure(scrollregion=self.layers_canvas.bbox("all"))
+            self.layers_canvas.yview_moveto(1)  # Scroll to bottom to show new layers
+            
             messagebox.showinfo("Success", f"Repeated selected layers {repeat_times} times")
             
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid repeat value: {str(e)}")
+
+    def _copy_material_properties(self, source_layer, dest_layer):
+        """Copy all material properties from source to destination layer"""
+        # First get current values from source
+        source_material = None
+        source_composition = None
+        
+        for child in source_layer['material_inputs'].winfo_children():
+            if hasattr(child, 'material_var'):
+                source_material = child.material_var.get()
+            if hasattr(child, 'comp_entry') and child.comp_entry.winfo_ismapped():
+                source_composition = child.comp_entry.get()
+        
+        # Clear existing inputs
+        for widget in dest_layer['material_inputs'].winfo_children():
+            widget.destroy()
+        
+        # Recreate inputs with source values
+        self.add_material_input(
+            dest_layer['material_inputs'], 
+            source_layer['type_var'].get(),
+            initial_material=source_material,
+            initial_composition=source_composition
+        )
+        
+        # Copy other properties (n/k values, etc.)
+        source_widgets = self._get_material_widgets_recursive(source_layer['material_inputs'])
+        dest_widgets = self._get_material_widgets_recursive(dest_layer['material_inputs'])
+        
+        for key in source_widgets:
+            if key in dest_widgets:
+                src_widget = source_widgets[key]
+                dest_widget = dest_widgets[key]
+                
+                if isinstance(src_widget, tk.Entry):
+                    current_value = src_widget.get()
+                    dest_widget.delete(0, tk.END)
+                    dest_widget.insert(0, current_value)
+                elif isinstance(src_widget, tk.StringVar):
+                    dest_widget.set(src_widget.get())
+                elif isinstance(src_widget, tk.BooleanVar):
+                    dest_widget.set(src_widget.get())
+
+    def _get_material_widgets_recursive(self, frame):
+        """Recursively get all material input widgets from a frame with their types"""
+        widgets = {}
+        
+        for child in frame.winfo_children():
+            if isinstance(child, (ttk.Combobox, tk.Entry, tk.Checkbutton)):
+                # Use the label text or widget type as key
+                if hasattr(child, 'winfo_children') and child.winfo_children():
+                    # For compound widgets, check their children
+                    for subchild in child.winfo_children():
+                        if isinstance(subchild, tk.Label):
+                            key = subchild.cget('text').replace(':', '').strip()
+                            widgets[key] = child
+                elif isinstance(child, ttk.Combobox):
+                    widgets['material'] = child
+                elif isinstance(child, tk.Entry):
+                    # Try to find a label for this entry
+                    prev_widget = None
+                    for sibling in frame.winfo_children():
+                        if sibling == child:
+                            if isinstance(prev_widget, tk.Label):
+                                key = prev_widget.cget('text').replace(':', '').strip()
+                                widgets[key] = child
+                            break
+                        prev_widget = sibling
+            elif isinstance(child, tk.Frame):
+                # Recursively check nested frames
+                widgets.update(self._get_material_widgets_recursive(child))
+        
+        return widgets
+
+
+    def _update_layer_display(self):
+        """Update the layer display after changes"""
+        # Update layer numbers
+        self.update_layer_numbers()
+        
+        # Update canvas scroll region
+        self.layers_canvas.configure(scrollregion=self.layers_canvas.bbox("all"))
+
+    def _create_layer_frame(self, index):
+        """Helper to create a new layer frame"""
+        layer_frame = tb.LabelFrame(
+            self.layers_container,
+            text=f"Layer {index + 2}",  # +1 for substrate, +1 for 0-based index
+            bootstyle="info"
+        )
+        layer_frame.pack(fill=X, pady=5, padx=5)
+        return layer_frame
+    
+    def _copy_layer_properties(self, source_layer, dest_layer):
+        """Copy properties from source layer to destination layer"""
+        # Copy layer type
+        dest_layer['type_var'].set(source_layer['type_var'].get())
+        
+        # Copy thickness
+        dest_layer['thickness_entry'].delete(0, tk.END)
+        dest_layer['thickness_entry'].insert(0, source_layer['thickness_entry'].get())
+        
+        # Copy material inputs (this is more complex and might need additional handling)
+        # You'll need to implement this based on your specific material input structure
+        self._copy_material_inputs(source_layer, dest_layer)
+        
+        # Copy selection state
+        dest_layer['select_var'].set(source_layer['select_var'].get())    
 
     def toggle_manual_finite_substrate(self):
         if self.manual_is_finite_substrate.get():
@@ -381,21 +500,6 @@ class LayerConfig:
         # Update the state based on both the checkbox and the active tab
         self.manual_mode_active = self.manual_layer_var.get() and is_manual_tab
 
-
-    def initialize_drude_lookup_table(self):
-        """Create a grid of Drude parameters for interpolation"""
-        # Define parameter ranges with 0.1 steps
-        self.f0_grid = np.arange(0.1, 20.1, 0.1)
-        self.gamma0_grid = np.arange(0.1, 5.1, 0.1) 
-        self.wp_grid = np.arange(1.0, 20.1, 0.1)
-        
-        # Create mesh grid for interpolation
-        self.F0, self.GAMMA0, self.WP = np.meshgrid(
-            self.f0_grid, self.gamma0_grid, self.wp_grid, indexing='ij'
-        )
-        
-        # Initialize empty cache (will be populated on demand)
-        self.drude_cache = {}
 
     def get_cached_reflectance(self, f0, gamma0, wp, wavelength):
         """Get reflectance from cache or compute if not available"""
@@ -526,7 +630,8 @@ class LayerConfig:
                     elif isinstance(widget, tb.Button):
                         widget.configure(state=state)
 
-    def add_manual_layer(self):
+    def add_manual_layer(self, skip_pack=False):
+        """Add a new manual layer to the stack, with option to skip packing the frame"""
         layer_num = len(self.manual_layers) + 2  # +1 for substrate, +1 for 0-based index
         
         # Create a new frame for this layer
@@ -535,153 +640,8 @@ class LayerConfig:
             text=f"Layer {layer_num}",
             bootstyle="info"
         )
-        layer_frame.pack(fill=X, pady=5, padx=5)
-        
-        # Material type selection
-        tb.Label(layer_frame, text="Layer Type:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        material_type_var = tk.StringVar(value="Semiconductor")
-        material_type_menu = ttk.Combobox(
-            layer_frame,
-            textvariable=material_type_var,
-            values=["Semiconductor", "Dielectric", "Metal"],
-            width=15,
-            state="readonly"
-        )
-        material_type_menu.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        material_type_menu.bind("<<ComboboxSelected>>", lambda e, f=layer_frame: self.update_material_inputs(f))
-        
-        # Thickness entry
-        tb.Label(layer_frame, text="Thickness (nm):").grid(row=0, column=2, padx=5, pady=5, sticky="w")
-        thickness_entry = tb.Entry(layer_frame, width=10)
-        thickness_entry.grid(row=0, column=3, padx=5, pady=5, sticky="w")
-        thickness_entry.insert(0, "100")  # Default thickness
-        
-        # Frame for material inputs
-        material_input_frame = tb.Frame(layer_frame)
-        material_input_frame.grid(row=1, column=0, columnspan=4, sticky="ew", padx=5, pady=5)
-        
-        # Add initial material input based on type
-        self.add_material_input(material_input_frame, material_type_var.get(), first=True)
-        
-        # Delete button
-        delete_btn = tb.Button(
-            layer_frame,
-            text="Delete Layer",
-            command=lambda: self.delete_manual_layer(layer_frame),
-            bootstyle="danger-outline"
-        )
-        delete_btn.grid(row=0, column=4, padx=5, pady=5)
-        
-        # Store the layer components
-        self.manual_layers.append({
-            'frame': layer_frame,
-            'type_var': material_type_var,
-            'thickness_entry': thickness_entry,
-            'material_inputs': material_input_frame
-        })
-        
-        # Update canvas scroll region
-        self.layers_canvas.configure(scrollregion=self.layers_canvas.bbox("all"))
-
-    def update_material_inputs(self, layer_frame):
-        """Update the material inputs based on selected layer type"""
-        # Find which layer this is
-        for layer in self.manual_layers:
-            if layer['frame'] == layer_frame:
-                material_type = layer['type_var'].get()
-                material_input_frame = layer['material_inputs']
-                
-                # Clear existing inputs
-                for widget in material_input_frame.winfo_children():
-                    widget.destroy()
-                
-                # Add appropriate inputs
-                self.add_material_input(material_input_frame, material_type, first=True)
-                break
-
-    def add_semiconductor_input(self, parent_frame, first=False):
-        """Add inputs for semiconductor materials with optional composition"""
-        frame = tb.Frame(parent_frame)
-        frame.pack(fill=X, pady=2)
-        
-        # Material selection
-        tb.Label(frame, text="Material:").pack(side=LEFT, padx=5)
-        material_var = tk.StringVar()
-        material_combo = ttk.Combobox(
-            frame,
-            textvariable=material_var,
-            values=["GaAs", "AlGaAs", "GaSb", "AlAsSb", "InSb", "AlSb", "InAs", "InAsSb"],
-            width=12,
-            state="readonly"
-        )
-        material_combo.pack(side=LEFT, padx=5)
-        material_combo.set("GaAs")  # Default value
-        
-        # Composition frame
-        comp_frame = tb.Frame(frame)
-        comp_frame.pack(side=LEFT, padx=5)
-        
-        # Composition checkbox
-        self.use_composition = tk.BooleanVar(value=False)
-        comp_check = tb.Checkbutton(
-            comp_frame,
-            text="Specify Composition",
-            variable=self.use_composition,
-            bootstyle="primary-round-toggle",
-            command=lambda: self.toggle_composition_entry(comp_entry)
-        )
-        comp_check.pack(side=LEFT)
-        
-        # Composition entry (initially disabled)
-        comp_entry = tb.Entry(comp_frame, width=8, state="disabled")
-        comp_entry.pack(side=LEFT, padx=5)
-        
-        # Function to update composition field based on material
-        def update_composition_field(*args):
-            material = material_var.get()
-            if material in ["AlGaAs", "AlAsSb", "InAsSb"]:
-                comp_check.config(state="normal")
-                if self.use_composition.get():
-                    comp_entry.config(state="normal")
-                    if material == "AlGaAs":
-                        comp_entry.delete(0, tk.END)
-                        comp_entry.insert(0, "30")  # Default Al composition
-                    elif material == "AlAsSb":
-                        comp_entry.delete(0, tk.END)
-                        comp_entry.insert(0, "50")  # Default AlAs composition
-                    elif material == "InAsSb":
-                        comp_entry.delete(0, tk.END)
-                        comp_entry.insert(0, "50")  # Default InAs composition
-            else:
-                comp_check.config(state="disabled")
-                comp_entry.config(state="disabled")
-                self.use_composition.set(False)
-        
-        # Initial setup
-        update_composition_field()
-        material_var.trace_add("write", update_composition_field)
-        
-        # Delete button (always shown except for first input)
-        if not first:
-            del_btn = tb.Button(
-                frame,
-                text="−",
-                command=lambda: frame.destroy(),
-                bootstyle="danger-outline",
-                width=2
-            )
-            del_btn.pack(side=RIGHT, padx=5)
-
-    def add_manual_layer(self):
-        layer_num = len(self.manual_layers) + 2  # +1 for substrate, +1 for 0-based index
-        
-        # Create a new frame for this layer
-        layer_frame = tb.LabelFrame(
-            self.layers_container,
-            text=f"Layer {layer_num}",
-            bootstyle="info"
-        )
-        layer_frame.pack(fill=X, pady=5, padx=5)
+        if not skip_pack:
+            layer_frame.pack(fill=X, pady=5, padx=5)
         
         # Checkbox for selecting this layer for repeating
         select_var = tk.BooleanVar(value=False)
@@ -729,16 +689,107 @@ class LayerConfig:
         delete_btn.grid(row=0, column=5, padx=5, pady=5)
         
         # Store the layer components
-        self.manual_layers.append({
+        layer_data = {
             'frame': layer_frame,
             'type_var': material_type_var,
             'thickness_entry': thickness_entry,
             'material_inputs': material_input_frame,
             'select_var': select_var
-        })
+        }
         
-        # Update canvas scroll region
-        self.layers_canvas.configure(scrollregion=self.layers_canvas.bbox("all"))
+        self.manual_layers.append(layer_data)
+        return layer_data
+
+
+    def update_material_inputs(self, layer_frame):
+        """Update the material inputs when layer type changes"""
+        # Find which layer this is
+        for layer in self.manual_layers:
+            if layer['frame'] == layer_frame:
+                # Clear existing inputs
+                for widget in layer['material_inputs'].winfo_children():
+                    widget.destroy()
+                
+                # Add new inputs based on type
+                self.add_material_input(layer['material_inputs'], layer['type_var'].get(), first=True)
+                break
+
+    def add_semiconductor_input(self, parent_frame, first=False):
+        """Add inputs for semiconductor materials with optional composition"""
+        frame = tb.Frame(parent_frame)
+        frame.pack(fill=X, pady=2)
+        
+        # Material selection
+        tb.Label(frame, text="Material:").pack(side=LEFT, padx=5)
+        material_var = tk.StringVar()
+        material_combo = ttk.Combobox(
+            frame,
+            textvariable=material_var,
+            values=["GaAs", "AlGaAs", "GaSb", "AlAsSb", "AlGaSb", "InSb", "AlSb", "InAs", "InAsSb"],
+            width=12,
+            state="readonly"
+        )
+        material_combo.pack(side=LEFT, padx=5)
+        material_combo.set("GaAs")  # Default value
+        
+        # Composition frame
+        comp_frame = tb.Frame(frame)
+        comp_frame.pack(side=LEFT, padx=5)
+        
+        # Composition checkbox
+        self.use_composition = tk.BooleanVar(value=False)
+        comp_check = tb.Checkbutton(
+            comp_frame,
+            text="Specify Composition",
+            variable=self.use_composition,
+            bootstyle="primary-round-toggle",
+            command=lambda: self.toggle_composition_entry(comp_entry)
+        )
+        comp_check.pack(side=LEFT)
+        
+        # Composition entry (initially disabled)
+        comp_entry = tb.Entry(comp_frame, width=8, state="disabled")
+        comp_entry.pack(side=LEFT, padx=5)
+        
+        # Function to update composition field based on material
+        def update_composition_field(*args):
+            material = material_var.get()
+            if material in ["AlGaAs", "AlAsSb", "AlGaSb", "InAsSb"]:
+                comp_check.config(state="normal")
+                if self.use_composition.get():
+                    comp_entry.config(state="normal")
+                    if material == "AlGaAs":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "30")  # Default Al composition
+                    elif material == "AlAsSb":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "50")  # Default AlAs composition
+                    elif material == "AlGaSb":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "30") # Default to x=0.3 (Al₀.₃Ga₀.₇Sb)
+                    elif material == "InAsSb":
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "50")  # Default InAs composition
+            else:
+                comp_check.config(state="disabled")
+                comp_entry.config(state="disabled")
+                self.use_composition.set(False)
+        
+        # Initial setup
+        update_composition_field()
+        material_var.trace_add("write", update_composition_field)
+        
+        # Delete button (always shown except for first input)
+        if not first:
+            del_btn = tb.Button(
+                frame,
+                text="−",
+                command=lambda: frame.destroy(),
+                bootstyle="danger-outline",
+                width=2
+            )
+            del_btn.pack(side=RIGHT, padx=5)
+
 
     def toggle_composition_entry(self, entry):
         """Toggle composition entry based on checkbox"""
@@ -770,44 +821,52 @@ class LayerConfig:
                         if isinstance(child, tb.Label) and "Layer" in child.cget("text"):
                             child.config(text=f"Layer {i+1}")
 
-    def add_material_input(self, parent_frame, material_type, first=False):
-        """Add inputs for material composition"""
+    def add_material_input(self, parent_frame, material_type, first=False, initial_material=None, initial_composition=None):
+        """Add appropriate material inputs based on layer type"""
         frame = tb.Frame(parent_frame)
         frame.pack(fill=X, pady=2)
         
         if material_type == "Semiconductor":
             # Material selection
             tb.Label(frame, text="Material:").pack(side=LEFT, padx=5)
-            material_var = tk.StringVar()
+            material_var = tk.StringVar(value=initial_material if initial_material else "GaAs")
             material_combo = ttk.Combobox(
                 frame,
                 textvariable=material_var,
-                values=["GaAs", "AlGaAs", "GaSb", "AlAsSb", "InAs", "InSb"],
+                values=["GaAs", "AlGaAs", "AlGaSb", "GaSb", "AlAsSb", "InAs", "InSb"],
                 width=12,
                 state="readonly"
             )
             material_combo.pack(side=LEFT, padx=5)
-            material_combo.set("GaAs")  # Default
+            frame.material_var = material_var
             
             # Composition entry for alloys
-            tb.Label(frame, text="Composition (%):").pack(side=LEFT, padx=5)
-            composition_entry = tb.Entry(frame, width=8)
-            composition_entry.pack(side=LEFT)
-            composition_entry.insert(0, "0")  # Default
+            comp_label = tb.Label(frame, text="Composition (%):")
+            comp_entry = tb.Entry(frame, width=8)
+            frame.comp_entry = comp_entry  # Store reference to composition entry
             
-            def toggle_composition(*args):
-                if material_var.get() in ["AlGaAs","AlAsSb", "GaSb", "GaAs", "InAs", "InSb"]:
-                    composition_entry.config(state="normal")
+            def update_composition_state(*args):
+                current_material = material_var.get()
+                if current_material in ["AlGaAs", "AlAsSb"]:
+                    comp_label.pack(side=LEFT, padx=5)
+                    comp_entry.pack(side=LEFT)
+                    if initial_composition is not None:  # Use provided composition if available
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, initial_composition)
+                    elif not comp_entry.get():  # Otherwise use default if empty
+                        comp_entry.delete(0, tk.END)
+                        comp_entry.insert(0, "30" if current_material == "AlGaAs" else "50")
                 else:
-                    composition_entry.config(state="disabled")
+                    comp_label.pack_forget()
+                    comp_entry.pack_forget()
             
-            material_var.trace_add("write", toggle_composition)
-            toggle_composition()  # Initial state
+            material_var.trace_add("write", update_composition_state)
+            update_composition_state()  # Initial update
             
         elif material_type == "Metal":
-            # Metal selection
+            # Metal selection (unchanged)
             tb.Label(frame, text="Metal:").pack(side=LEFT, padx=5)
-            material_var = tk.StringVar()
+            material_var = tk.StringVar(value=initial_material if initial_material else "Ag")
             material_combo = ttk.Combobox(
                 frame,
                 textvariable=material_var,
@@ -816,25 +875,19 @@ class LayerConfig:
                 state="readonly"
             )
             material_combo.pack(side=LEFT, padx=5)
-            material_combo.set("Ag")  # Default
+            frame.material_var = material_var
             
-            # Composition entry (for alloys - though metals are usually pure here)
-            tb.Label(frame, text="Composition (%):").pack(side=LEFT, padx=5)
-            composition_entry = tb.Entry(frame, width=8, state="disabled")
-            composition_entry.pack(side=LEFT)
-            composition_entry.insert(0, "100")  # Default to pure metal
-            
-        else:  # Dielectric
-            tb.Label(frame, text="Dielectric Constant (n):").pack(side=LEFT, padx=5)
+        else:  # Dielectric (unchanged)
+            # Refractive index entries
+            tb.Label(frame, text="n:").pack(side=LEFT, padx=5)
             n_entry = tb.Entry(frame, width=8)
-            n_entry.pack(side=LEFT, padx=5)
-            n_entry.insert(0, "1.0")  # Default
+            n_entry.pack(side=LEFT)
+            n_entry.insert(0, "1.0")
             
-            tb.Label(frame, text="Extinction Coefficient (k):").pack(side=LEFT, padx=5)
+            tb.Label(frame, text="k:").pack(side=LEFT, padx=5)
             k_entry = tb.Entry(frame, width=8)
             k_entry.pack(side=LEFT)
-            k_entry.insert(0, "0.0")  # Default
-        
+            k_entry.insert(0, "0.0")
 
     def setup_substrate_selection(self):
         # Main configuration tab
@@ -1787,6 +1840,9 @@ class LayerConfig:
                         dbr_stack.append([thickness, layer_type, [3.816, 0.0]])
                     elif material == "AlAsSb":
                         dbr_stack.append([thickness, layer_type, [3.101, 0.0]])
+                    elif material == "AlGaSb":
+                        # Default to x=0.3 (Al₀.₃Ga₀.₇Sb) if composition is not specified
+                        dbr_stack.append([thickness, layer_type, [4.106, 0.0]])  # Approximate n at 1.5 eV
                     else:
                         dbr_stack.append([thickness, layer_type, [1.0, 0.0]])
                 else:  # Handle legacy list format
@@ -1794,6 +1850,8 @@ class LayerConfig:
                         dbr_stack.append([layer[0], layer[1], [3.816, 0.0]])
                     elif len(layer) >= 3 and layer[2] == "AlAsSb_ln":
                         dbr_stack.append([layer[0], layer[1], [3.101, 0.0]])
+                    elif len(layer) >= 3 and layer[2] == "AlGaSb_ln":
+                        dbr_stack.append([layer[0], layer[1], [4.106, 0.0]])  # Default x=0.3
                     else:
                         dbr_stack.append([layer[0], layer[1], [1.0, 0.0]])
 
@@ -1875,6 +1933,7 @@ class LayerConfig:
         return properties
 
     def _get_semiconductor_refractive_index(self, material, composition):
+        
         """Return refractive index (n,k) for semiconductor materials with composition dependence"""
         # Convert composition percentage to fraction (0-1)
         x = composition / 100.0
@@ -1884,24 +1943,34 @@ class LayerConfig:
             return (3.3, 0.0)  # n=3.3, k=0 at ~2.0 eV
             
         elif material == "AlGaAs":
-            # Al(x)Ga(1-x)As - using Adachi 1989 model with interpolation
-            # Parameters for x=0 (GaAs) and x=0.315 from Adachi
-            # Linear interpolation between these points
+            # Al(x)Ga(1-x)As refractive index at 2.0 eV (~620 nm)
+            # Using data from batop.de (https://batop.de/information/n_AlGaAs.html#), with linear interpolation between points
             
-            # GaAs (x=0) parameters
-            n_GaAs = 3.3
-            k_GaAs = 0.0
+            # Composition points from batop.de (x, n)
+            composition_points = [
+                (0.0, 3.3),    # GaAs
+                (0.1, 3.366),  # From 2000 nm data point (closest to 2.0 eV)
+                (0.2, 3.311),
+                (0.3, 3.268),
+                (0.4, 3.223),
+                (0.5, 3.173),
+                (0.6, 3.127),
+                (0.7, 3.056),
+                (0.8, 2.965),
+                (0.9, 2.951),
+                (1.0, 2.915)   # AlAs
+            ]
             
-            # Al0.315Ga0.685As parameters from Adachi
-            n_Al315 = 2.9  # Approximate value at 2.0 eV from the plot
-            k_Al315 = 0.0
+            # Find the two closest composition points
+            for i in range(len(composition_points)-1):
+                x1, n1 = composition_points[i]
+                x2, n2 = composition_points[i+1]
+                if x1 <= x <= x2:
+                    # Linear interpolation
+                    n = n1 + (n2 - n1) * (x - x1) / (x2 - x1)
+                    return (n, 0.0)
             
-            # Linear interpolation
-            n = n_GaAs + (n_Al315 - n_GaAs) * (x / 0.315)
-            k = k_GaAs + (k_Al315 - k_GaAs) * (x / 0.315)
-            
-            return (n, k)
-            
+            return (3.3, 0.0)  # Default to GaAs if out of range
         elif material == "GaSb":
             # Pure GaSb from Adachi 1989
             return (3.8, 0.0)  # n=3.8 at ~1.5 eV
@@ -1956,7 +2025,230 @@ class LayerConfig:
                 n = n_InSb + (n_InAs - n_InSb) * x
                 k = k_InSb + (k_InAs - k_InSb) * x
                 return (n, k)
-        
+        elif material == "AlGaSb":
+            # data from R. Ferrini et al., Optical functions from 0.02 to 6 eV of AlxGa1-xSb/GaSb epitaxial layers
+            # Al(x)Ga(1-x)Sb implementation based on provided data
+            # We'll implement two approaches:
+            # 1. For energies below E0 (fundamental gap): Use Sellmeier equation
+            # 2. For energies above E0: Use interpolation of tabulated data
+            energy_eV= 2.0
+            # First calculate E0 (fundamental gap) for this composition
+            E0 = 0.738 + 1.247 * x  # From linear relation in paper
+            
+            if energy_eV < E0:
+                # Below bandgap - use Sellmeier equation with composition-dependent coefficients
+                # Calculate Sellmeier coefficients for this composition (quadratic dependence)
+                A = 14.07 - 4.80*x - 0.66*x*x
+                B = 0.458 - 0.099*x + 1.258*x*x
+                C = 1.486 - 2.308*x + 1.973*x*x  # in microns
+                
+                # Convert energy to wavelength in microns
+                wavelength_um = 1.2398 / energy_eV  # hc/E conversion
+                
+                # Sellmeier equation
+                n_squared = A + B * wavelength_um**2 / (wavelength_um**2 - C**2)
+                n = n_squared**0.5
+                k = 0.0  # Below bandgap, no absorption
+                
+            else:
+                # Above bandgap - use interpolated data from Table II
+                # Data points from Table II for x = 0.0, 0.1, 0.3, 0.5
+                # We'll do bilinear interpolation in x and energy
+                
+                # Tabulated data: [x, energy, n, k]
+                data_points = [
+                    # x=0.0 (GaSb)
+                    [0.0, 0.5, 3.846, 0.0],
+                    [0.0, 0.6, 3.878, 0.0],
+                    [0.0, 0.7, 3.959, 0.023],
+                    [0.0, 0.8, 4.010, 0.125],
+                    [0.0, 0.9, 4.026, 0.145],
+                    [0.0, 1.0, 4.050, 0.173],
+                    [0.0, 1.1, 4.096, 0.201],
+                    [0.0, 1.2, 4.140, 0.225],
+                    [0.0, 1.3, 4.200, 0.268],
+                    [0.0, 1.4, 4.270, 0.299],
+                    [0.0, 1.5, 4.370, 0.338],
+                    [0.0, 1.6, 4.500, 0.407],
+                    [0.0, 1.7, 4.644, 0.514],
+                    [0.0, 1.8, 4.822, 0.647],
+                    [0.0, 1.9, 5.037, 0.881],
+                    [0.0, 2.0, 5.197, 1.465],
+                    [0.0, 2.1, 4.630, 1.843],
+                    [0.0, 2.2, 4.470, 1.770],
+                    [0.0, 2.3, 4.455, 1.812],
+                    [0.0, 2.4, 4.464, 2.000],
+                    [0.0, 2.5, 4.235, 2.289],
+                    [0.0, 2.6, 3.946, 2.268],
+                    [0.0, 2.7, 3.816, 2.190],
+                    [0.0, 2.8, 3.755, 2.148],
+                    [0.0, 2.9, 3.740, 2.116],
+                    [0.0, 3.0, 3.751, 2.119],
+                    # x=0.1
+                    [0.1, 0.5, 3.765, 0.0],
+                    [0.1, 0.6, 3.781, 0.0],
+                    [0.1, 0.7, 3.807, 0.0],
+                    [0.1, 0.8, 3.861, 0.014],
+                    [0.1, 0.9, 3.942, 0.094],
+                    [0.1, 1.0, 3.952, 0.125],
+                    [0.1, 1.1, 3.983, 0.148],
+                    [0.1, 1.2, 4.031, 0.162],
+                    [0.1, 1.3, 4.110, 0.184],
+                    [0.1, 1.4, 4.183, 0.217],
+                    [0.1, 1.5, 4.262, 0.268],
+                    [0.1, 1.6, 4.393, 0.309],
+                    [0.1, 1.7, 4.529, 0.372],
+                    [0.1, 1.8, 4.697, 0.487],
+                    [0.1, 1.9, 4.917, 0.675],
+                    [0.1, 2.0, 5.154, 1.025],
+                    [0.1, 2.1, 5.087, 1.729],
+                    [0.1, 2.2, 4.568, 1.804],
+                    [0.1, 2.3, 4.483, 1.792],
+                    [0.1, 2.4, 4.461, 1.897],
+                    [0.1, 2.5, 4.425, 2.142],
+                    [0.1, 2.6, 4.100, 2.327],
+                    [0.1, 2.7, 3.893, 2.247],
+                    [0.1, 2.8, 3.804, 2.200],
+                    [0.1, 2.9, 3.768, 2.181],
+                    [0.1, 3.0, 3.758, 2.164],
+                    # x=0.3
+                    [0.3, 0.5, 3.637, 0.0],
+                    [0.3, 0.6, 3.645, 0.0],
+                    [0.3, 0.7, 3.657, 0.0],
+                    [0.3, 0.8, 3.674, 0.0],
+                    [0.3, 0.9, 3.702, 0.0],
+                    [0.3, 1.0, 3.751, 0.0],
+                    [0.3, 1.1, 3.863, 0.033],
+                    [0.3, 1.2, 3.906, 0.075],
+                    [0.3, 1.3, 3.946, 0.109],
+                    [0.3, 1.4, 4.015, 0.125],
+                    [0.3, 1.5, 4.106, 0.133],
+                    [0.3, 1.6, 4.249, 0.174],
+                    [0.3, 1.7, 4.373, 0.240],
+                    [0.3, 1.8, 4.515, 0.361],
+                    [0.3, 1.9, 4.679, 0.497],
+                    [0.3, 2.0, 4.853, 0.674],
+                    [0.3, 2.1, 5.053, 0.974],
+                    [0.3, 2.2, 5.127, 1.539],
+                    [0.3, 2.3, 4.636, 1.845],
+                    [0.3, 2.4, 4.489, 1.833],
+                    [0.3, 2.5, 4.453, 1.909],
+                    [0.3, 2.6, 4.419, 2.101],
+                    [0.3, 2.7, 4.180, 2.318],
+                    [0.3, 2.8, 3.959, 2.286],
+                    [0.3, 2.9, 3.870, 2.259],
+                    [0.3, 3.0, 3.829, 2.249],
+                    # x=0.5
+                    [0.5, 0.5, 3.508, 0.0],
+                    [0.5, 0.6, 3.514, 0.0],
+                    [0.5, 0.7, 3.523, 0.0],
+                    [0.5, 0.8, 3.535, 0.0],
+                    [0.5, 0.9, 3.551, 0.0],
+                    [0.5, 1.0, 3.575, 0.0],
+                    [0.5, 1.1, 3.610, 0.0],
+                    [0.5, 1.2, 3.667, 0.0],
+                    [0.5, 1.3, 3.778, 0.0],
+                    [0.5, 1.4, 3.895, 0.004],
+                    [0.5, 1.5, 3.970, 0.017],
+                    [0.5, 1.6, 4.063, 0.033],
+                    [0.5, 1.7, 4.176, 0.067],
+                    [0.5, 1.8, 4.289, 0.098],
+                    [0.5, 1.9, 4.475, 0.155],
+                    [0.5, 2.0, 4.720, 0.265],
+                    [0.5, 2.1, 4.989, 0.525],
+                    [0.5, 2.2, 5.112, 0.970],
+                    [0.5, 2.3, 5.031, 1.426],
+                    [0.5, 2.4, 4.632, 1.702],
+                    [0.5, 2.5, 4.483, 1.605],
+                    [0.5, 2.6, 4.552, 1.716],
+                    [0.5, 2.7, 4.491, 1.943],
+                    [0.5, 2.8, 4.302, 2.147],
+                    [0.5, 2.9, 4.105, 2.146],
+                    [0.5, 3.0, 4.030, 2.149]
+                ]
+                
+                # Find the closest data points for bilinear interpolation
+                # First find the bounding x values
+                x_values = sorted(list(set(pt[0] for pt in data_points)))
+                lower_x = max([xv for xv in x_values if xv <= x])
+                upper_x = min([xv for xv in x_values if xv >= x])
+                
+                if lower_x == upper_x:
+                    # Exact match for x, just interpolate in energy
+                    x_data = [pt for pt in data_points if pt[0] == x]
+                    energies = [pt[1] for pt in x_data]
+                    n_values = [pt[2] for pt in x_data]
+                    k_values = [pt[3] for pt in x_data]
+                    
+                    # Find bounding energies
+                    lower_e = max([e for e in energies if e <= energy_eV])
+                    upper_e = min([e for e in energies if e >= energy_eV])
+                    
+                    if lower_e == upper_e:
+                        # Exact match
+                        idx = energies.index(lower_e)
+                        n = n_values[idx]
+                        k = k_values[idx]
+                    else:
+                        # Linear interpolation in energy
+                        idx_lower = energies.index(lower_e)
+                        idx_upper = energies.index(upper_e)
+                        
+                        # Interpolation factor
+                        t = (energy_eV - lower_e) / (upper_e - lower_e)
+                        
+                        n = n_values[idx_lower] + t * (n_values[idx_upper] - n_values[idx_lower])
+                        k = k_values[idx_lower] + t * (k_values[idx_upper] - k_values[idx_lower])
+                else:
+                    # Need to interpolate in both x and energy
+                    # Get data for lower x
+                    lower_x_data = [pt for pt in data_points if pt[0] == lower_x]
+                    lower_energies = [pt[1] for pt in lower_x_data]
+                    lower_n = [pt[2] for pt in lower_x_data]
+                    lower_k = [pt[3] for pt in lower_x_data]
+                    
+                    # Get data for upper x
+                    upper_x_data = [pt for pt in data_points if pt[0] == upper_x]
+                    upper_energies = [pt[1] for pt in upper_x_data]
+                    upper_n = [pt[2] for pt in upper_x_data]
+                    upper_k = [pt[3] for pt in upper_x_data]
+                    
+                    # Find bounding energies for lower x
+                    lower_e_lower = max([e for e in lower_energies if e <= energy_eV])
+                    lower_e_upper = min([e for e in lower_energies if e >= energy_eV])
+                    
+                    # Find bounding energies for upper x
+                    upper_e_lower = max([e for e in upper_energies if e <= energy_eV])
+                    upper_e_upper = min([e for e in upper_energies if e >= energy_eV])
+                    
+                    # Interpolate in energy at lower x
+                    if lower_e_lower == lower_e_upper:
+                        n_lower = lower_n[lower_energies.index(lower_e_lower)]
+                        k_lower = lower_k[lower_energies.index(lower_e_lower)]
+                    else:
+                        t_lower = (energy_eV - lower_e_lower) / (lower_e_upper - lower_e_lower)
+                        idx_ll = lower_energies.index(lower_e_lower)
+                        idx_lu = lower_energies.index(lower_e_upper)
+                        n_lower = lower_n[idx_ll] + t_lower * (lower_n[idx_lu] - lower_n[idx_ll])
+                        k_lower = lower_k[idx_ll] + t_lower * (lower_k[idx_lu] - lower_k[idx_ll])
+                    
+                    # Interpolate in energy at upper x
+                    if upper_e_lower == upper_e_upper:
+                        n_upper = upper_n[upper_energies.index(upper_e_lower)]
+                        k_upper = upper_k[upper_energies.index(upper_e_lower)]
+                    else:
+                        t_upper = (energy_eV - upper_e_lower) / (upper_e_upper - upper_e_lower)
+                        idx_ul = upper_energies.index(upper_e_lower)
+                        idx_uu = upper_energies.index(upper_e_upper)
+                        n_upper = upper_n[idx_ul] + t_upper * (upper_n[idx_uu] - upper_n[idx_ul])
+                        k_upper = upper_k[idx_ul] + t_upper * (upper_k[idx_uu] - upper_k[idx_ul])
+                    
+                    # Now interpolate in x
+                    t_x = (x - lower_x) / (upper_x - lower_x)
+                    n = n_lower + t_x * (n_upper - n_lower)
+                    k = k_lower + t_x * (k_upper - k_lower)
+            
+            return (n, k)
         else:
             return (1.0, 0.0)  # Default for unknown materials
 
