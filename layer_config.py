@@ -12,6 +12,9 @@ from scipy.interpolate import RegularGridInterpolator
 import threading  # Add this if not already present
 import pandas as pd  # Add this if not already present
 
+global_wavelength_array = np.linspace(2000, 16000, 3500)  # shape (3500,)
+
+
 class LayerConfig:
     
     def __init__(self, root, settings, plotter=None):
@@ -763,13 +766,13 @@ class LayerConfig:
                         comp_entry.insert(0, "30")  # Default Al composition
                     elif material == "AlAsSb":
                         comp_entry.delete(0, tk.END)
-                        comp_entry.insert(0, "50")  # Default AlAs composition
+                        comp_entry.insert(0, "30")  # Default AlAsSb composition
                     elif material == "AlGaSb":
                         comp_entry.delete(0, tk.END)
                         comp_entry.insert(0, "30") # Default to x=0.3 (Al₀.₃Ga₀.₇Sb)
                     elif material == "InAsSb":
                         comp_entry.delete(0, tk.END)
-                        comp_entry.insert(0, "50")  # Default InAs composition
+                        comp_entry.insert(0, "30")  # Default InAs composition
             else:
                 comp_check.config(state="disabled")
                 comp_entry.config(state="disabled")
@@ -847,7 +850,7 @@ class LayerConfig:
             
             def update_composition_state(*args):
                 current_material = material_var.get()
-                if current_material in ["AlGaAs", "AlAsSb"]:
+                if current_material in ["AlGaAs", "AlAsSb", "AlGaSb"]:
                     comp_label.pack(side=LEFT, padx=5)
                     comp_entry.pack(side=LEFT)
                     if initial_composition is not None:  # Use provided composition if available
@@ -1893,7 +1896,7 @@ class LayerConfig:
                                 composition = 0
                     
                     # Get refractive indices based on material and composition
-                    n, k = self._get_semiconductor_refractive_index(material, composition)
+                    n, k = self._get_semiconductor_refractive_index(material, composition, wavelength_nm=global_wavelength_array)
                     properties.append(("Semiconductor", n, k, composition))
                     
                 elif material_type == "Metal":
@@ -1932,8 +1935,8 @@ class LayerConfig:
         
         return properties
 
-    def _get_semiconductor_refractive_index(self, material, composition):
-        
+    def _get_semiconductor_refractive_index(self, material, composition, wavelength_nm):
+      
         """Return refractive index (n,k) for semiconductor materials with composition dependence"""
         # Convert composition percentage to fraction (0-1)
         x = composition / 100.0
@@ -1943,54 +1946,106 @@ class LayerConfig:
             return (3.3, 0.0)  # n=3.3, k=0 at ~2.0 eV
             
         elif material == "AlGaAs":
-            # Al(x)Ga(1-x)As refractive index at 2.0 eV (~620 nm)
+            # Calculate Al(x)Ga(1-x)As refractive index 
             # Using data from batop.de (https://batop.de/information/n_AlGaAs.html#), with linear interpolation between points
-            
-            # Composition points from batop.de (x, n)
-            composition_points = [
-                (0.0, 3.3),    # GaAs
-                (0.1, 3.366),  # From 2000 nm data point (closest to 2.0 eV)
-                (0.2, 3.311),
-                (0.3, 3.268),
-                (0.4, 3.223),
-                (0.5, 3.173),
-                (0.6, 3.127),
-                (0.7, 3.056),
-                (0.8, 2.965),
-                (0.9, 2.951),
-                (1.0, 2.915)   # AlAs
-            ]
-            
-            # Find the two closest composition points
-            for i in range(len(composition_points)-1):
-                x1, n1 = composition_points[i]
-                x2, n2 = composition_points[i+1]
-                if x1 <= x <= x2:
-                    # Linear interpolation
-                    n = n1 + (n2 - n1) * (x - x1) / (x2 - x1)
-                    return (n, 0.0)
-            
-            return (3.3, 0.0)  # Default to GaAs if out of range
+            # Create wavelength array (from 2 µm to 16 µm, 10 nm step)
+            if x < 0 or x > 1:
+                raise ValueError("Aluminum fraction x must be between 0 and 1.")
+
+            wl = np.array(wavelength_nm) 
+            energy_eV = 1239.84 / wl  # Convert wavelength to energy
+
+            # Calculate energy gap
+            if x > 0.45:
+                energy_gap = 1.9 + 0.125 * x + 0.143 * x**2
+            else:
+                energy_gap = 1.422 + 1.2475 * x
+
+            # Identify where absorption occurs
+            absorbing = energy_eV >= energy_gap
+
+            # Intermediate chi terms
+            chi = energy_eV / (1.425 + 1.155 * x + 0.37 * x**2)
+            chio = energy_eV / (1.765 + 1.115 * x + 0.37 * x**2)
+
+            # Avoid invalid sqrt of (1 - chi), clip inside [-1, 1] range
+            chi = np.clip(chi, -0.999, 0.999)
+            chio = np.clip(chio, -0.999, 0.999)
+
+            # f and fo terms
+            f = (2 - np.sqrt(1 + chi) - np.sqrt(1 - chi)) / (chi**2)
+            fo = (2 - np.sqrt(1 + chio) - np.sqrt(1 - chio)) / (chio**2)
+
+            # Bruch coefficient
+            bruch = 0.5 * np.sqrt(
+                ((1.425 + 1.155 * x + 0.37 * x**2) /
+                (1.765 + 1.115 * x + 0.37 * x**2)) ** 3
+            )
+
+            # Final refractive index
+            n_squared_term = (6.3 + 19.0 * x) * (f + bruch * fo) + (9.4 - 10.2 * x)
+            n = np.sqrt(n_squared_term)
+
+            # Set k = 0 for non-absorbing regions, or NaN if absorbing
+            k = np.zeros_like(n)
+            n[absorbing] = np.nan  # or optionally keep as-is
+            k[absorbing] = np.nan  # if you want to mark absorbing wavelengths
+
+            return (n, k)
+
         elif material == "GaSb":
             # Pure GaSb from Adachi 1989
             return (3.8, 0.0)  # n=3.8 at ~1.5 eV
             
         elif material == "AlAsSb":
-            # AlAs(x)Sb(1-x) - using similar approach as AlGaAs
-            # For simplicity, we'll approximate based on GaSb and AlSb
+            # AlAs(x)Sb(1-x) refractive index with wavelength dependence
+            # Using multiple empirical relations from Gupta, Moss, Herve, Ravindra, and Reddy
             
-            # GaSb parameters
-            n_GaSb = 3.8
-            k_GaSb = 0.0
+            wl = np.array(wavelength_nm) 
             
-            # AlSb parameters (approximate)
-            n_AlSb = 3.1  # Rough estimate
-            k_AlSb = 0.0
+            # Calculate energy in eV
+            energy_eV = 1239.84 / wl  # hc/E conversion
             
-            # Linear interpolation
-            n = n_GaSb + (n_AlSb - n_GaSb) * x
-            k = k_GaSb + (k_AlSb - k_GaSb) * x
-            return(n,k)
+            # Bandgap calculation for AlAsSb (from https://www.sciencedirect.com/science/article/pii/S0749603613000931)
+            Eg = 1.615 * x + 0.73 * (1-x) - 0.5 * x * (1-x)  # Vegard's law with bowing
+            
+            # Initialize arrays
+            n_vals = np.zeros_like(wl)
+            k_vals = np.zeros_like(wl)
+            
+            # Apply all empirical relations
+            for i, (wl_i, E_i) in enumerate(zip(wl, energy_eV)):
+                # Gupta and Ravindra relation
+                n_gupta = 4.084 - 0.62 * Eg
+                
+                # Moss formula (n^4 Eg = k, where k ≈ 95 is typical)
+                n_moss = (95 / Eg)**0.25 if Eg > 0 else n_gupta
+                
+                # Herve and Vandamme
+                n_herve = np.sqrt(1 + (13.6/(Eg + 3.4))**2)
+                
+                # Ravindra relation
+                n_ravindra = 4.16 - 0.85 * Eg
+                
+                # Reddy and Ahammed
+                n_reddy = ((154/(Eg - 0.365)))**0.25 if Eg > 0.365 else n_gupta
+                
+                # Take average of all valid relations
+                valid_estimates = [n for n in [n_gupta, n_moss, n_herve, n_ravindra, n_reddy] if not np.isnan(n)]
+                n_vals[i] = np.mean(valid_estimates) if valid_estimates else 3.5  # fallback
+                
+                # Calculate k if above bandgap
+                if E_i >= Eg:
+                    # Simple approximation for absorption coefficient
+                    alpha = 1e4 * np.sqrt(E_i - Eg)  # cm^-1
+                    k_vals[i] = (alpha * wl_i * 1e-7) / (4 * np.pi)
+                else:
+                    k_vals[i] = 0.0
+            
+            # Return as tuple (n, k)
+            if len(n_vals) == 1:
+                return (float(n_vals[0]), float(k_vals[0]))
+            return (n_vals, k_vals)
 
         elif material == "InSb":
             # From the first dataset you provided (Mikhail Polyanskiy)
@@ -2031,32 +2086,16 @@ class LayerConfig:
             # We'll implement two approaches:
             # 1. For energies below E0 (fundamental gap): Use Sellmeier equation
             # 2. For energies above E0: Use interpolation of tabulated data
-            energy_eV= 2.0
-            # First calculate E0 (fundamental gap) for this composition
-            E0 = 0.738 + 1.247 * x  # From linear relation in paper
-            
-            if energy_eV < E0:
-                # Below bandgap - use Sellmeier equation with composition-dependent coefficients
-                # Calculate Sellmeier coefficients for this composition (quadratic dependence)
-                A = 14.07 - 4.80*x - 0.66*x*x
-                B = 0.458 - 0.099*x + 1.258*x*x
-                C = 1.486 - 2.308*x + 1.973*x*x  # in microns
-                
-                # Convert energy to wavelength in microns
-                wavelength_um = 1.2398 / energy_eV  # hc/E conversion
-                
-                # Sellmeier equation
-                n_squared = A + B * wavelength_um**2 / (wavelength_um**2 - C**2)
-                n = n_squared**0.5
-                k = 0.0  # Below bandgap, no absorption
-                
-            else:
-                # Above bandgap - use interpolated data from Table II
-                # Data points from Table II for x = 0.0, 0.1, 0.3, 0.5
-                # We'll do bilinear interpolation in x and energy
-                
-                # Tabulated data: [x, energy, n, k]
-                data_points = [
+
+            wavelength_um_array = wavelength_nm / 1000.0
+
+            energy_eV_array = 1.2398 / wavelength_um_array
+
+            # Output arrays
+            n_array = np.zeros_like(energy_eV_array)
+            k_array = np.zeros_like(energy_eV_array)
+
+            data_points = [
                     # x=0.0 (GaSb)
                     [0.0, 0.5, 3.846, 0.0],
                     [0.0, 0.6, 3.878, 0.0],
@@ -2166,89 +2205,67 @@ class LayerConfig:
                     [0.5, 2.9, 4.105, 2.146],
                     [0.5, 3.0, 4.030, 2.149]
                 ]
+ 
+            x_values = sorted(list(set(pt[0] for pt in data_points)))
+
+            # Preprocess data by x
+            data_by_x = {xv: [] for xv in x_values}
+            for pt in data_points:
+                data_by_x[pt[0]].append(pt)
+
+
+            # First calculate E0 (fundamental gap) for this composition
+            E0 = 0.738 + 1.247 * x  # From linear relation in paper
+
+            for i, energy_eV in enumerate(energy_eV_array):
+
+                if energy_eV < E0:
+                    # Use Sellmeier equation
+                    A = 14.07 - 4.80*x - 0.66*x*x
+                    B = 0.458 - 0.099*x + 1.258*x*x
+                    C = 1.486 - 2.308*x + 1.973*x*x  # in microns
+                    λ = wavelength_um_array[i]
+                    n_squared = A + B * λ**2 / (λ**2 - C**2)
+                    n_array[i] = np.sqrt(n_squared)
+                    k_array[i] = 0.0
                 
-                # Find the closest data points for bilinear interpolation
-                # First find the bounding x values
-                x_values = sorted(list(set(pt[0] for pt in data_points)))
-                lower_x = max([xv for xv in x_values if xv <= x])
-                upper_x = min([xv for xv in x_values if xv >= x])
-                
-                if lower_x == upper_x:
-                    # Exact match for x, just interpolate in energy
-                    x_data = [pt for pt in data_points if pt[0] == x]
-                    energies = [pt[1] for pt in x_data]
-                    n_values = [pt[2] for pt in x_data]
-                    k_values = [pt[3] for pt in x_data]
-                    
-                    # Find bounding energies
-                    lower_e = max([e for e in energies if e <= energy_eV])
-                    upper_e = min([e for e in energies if e >= energy_eV])
-                    
-                    if lower_e == upper_e:
-                        # Exact match
-                        idx = energies.index(lower_e)
-                        n = n_values[idx]
-                        k = k_values[idx]
-                    else:
-                        # Linear interpolation in energy
-                        idx_lower = energies.index(lower_e)
-                        idx_upper = energies.index(upper_e)
-                        
-                        # Interpolation factor
-                        t = (energy_eV - lower_e) / (upper_e - lower_e)
-                        
-                        n = n_values[idx_lower] + t * (n_values[idx_upper] - n_values[idx_lower])
-                        k = k_values[idx_lower] + t * (k_values[idx_upper] - k_values[idx_lower])
                 else:
-                    # Need to interpolate in both x and energy
-                    # Get data for lower x
-                    lower_x_data = [pt for pt in data_points if pt[0] == lower_x]
-                    lower_energies = [pt[1] for pt in lower_x_data]
-                    lower_n = [pt[2] for pt in lower_x_data]
-                    lower_k = [pt[3] for pt in lower_x_data]
-                    
-                    # Get data for upper x
-                    upper_x_data = [pt for pt in data_points if pt[0] == upper_x]
-                    upper_energies = [pt[1] for pt in upper_x_data]
-                    upper_n = [pt[2] for pt in upper_x_data]
-                    upper_k = [pt[3] for pt in upper_x_data]
-                    
-                    # Find bounding energies for lower x
-                    lower_e_lower = max([e for e in lower_energies if e <= energy_eV])
-                    lower_e_upper = min([e for e in lower_energies if e >= energy_eV])
-                    
-                    # Find bounding energies for upper x
-                    upper_e_lower = max([e for e in upper_energies if e <= energy_eV])
-                    upper_e_upper = min([e for e in upper_energies if e >= energy_eV])
-                    
-                    # Interpolate in energy at lower x
-                    if lower_e_lower == lower_e_upper:
-                        n_lower = lower_n[lower_energies.index(lower_e_lower)]
-                        k_lower = lower_k[lower_energies.index(lower_e_lower)]
+                    # Bilinear interpolation in x and energy
+                    lower_x = max([xv for xv in x_values if xv <= x])
+                    upper_x = min([xv for xv in x_values if xv >= x])
+
+                    def interpolate_energy(x_data, energy):
+                        energies = [pt[1] for pt in x_data]
+                        n_vals = [pt[2] for pt in x_data]
+                        k_vals = [pt[3] for pt in x_data]
+
+                        lower_e = max([e for e in energies if e <= energy])
+                        upper_e = min([e for e in energies if e >= energy])
+
+                        if lower_e == upper_e:
+                            idx = energies.index(lower_e)
+                            return n_vals[idx], k_vals[idx]
+                        else:
+                            idx_l = energies.index(lower_e)
+                            idx_u = energies.index(upper_e)
+                            t = (energy - lower_e) / (upper_e - lower_e)
+                            n = n_vals[idx_l] + t * (n_vals[idx_u] - n_vals[idx_l])
+                            k = k_vals[idx_l] + t * (k_vals[idx_u] - k_vals[idx_l])
+                            return n, k
+
+                    if lower_x == upper_x:
+                        n, k = interpolate_energy(data_by_x[lower_x], energy_eV)
                     else:
-                        t_lower = (energy_eV - lower_e_lower) / (lower_e_upper - lower_e_lower)
-                        idx_ll = lower_energies.index(lower_e_lower)
-                        idx_lu = lower_energies.index(lower_e_upper)
-                        n_lower = lower_n[idx_ll] + t_lower * (lower_n[idx_lu] - lower_n[idx_ll])
-                        k_lower = lower_k[idx_ll] + t_lower * (lower_k[idx_lu] - lower_k[idx_ll])
-                    
-                    # Interpolate in energy at upper x
-                    if upper_e_lower == upper_e_upper:
-                        n_upper = upper_n[upper_energies.index(upper_e_lower)]
-                        k_upper = upper_k[upper_energies.index(upper_e_lower)]
-                    else:
-                        t_upper = (energy_eV - upper_e_lower) / (upper_e_upper - upper_e_lower)
-                        idx_ul = upper_energies.index(upper_e_lower)
-                        idx_uu = upper_energies.index(upper_e_upper)
-                        n_upper = upper_n[idx_ul] + t_upper * (upper_n[idx_uu] - upper_n[idx_ul])
-                        k_upper = upper_k[idx_ul] + t_upper * (upper_k[idx_uu] - upper_k[idx_ul])
-                    
-                    # Now interpolate in x
-                    t_x = (x - lower_x) / (upper_x - lower_x)
-                    n = n_lower + t_x * (n_upper - n_lower)
-                    k = k_lower + t_x * (k_upper - k_lower)
-            
-            return (n, k)
+                        n_lower, k_lower = interpolate_energy(data_by_x[lower_x], energy_eV)
+                        n_upper, k_upper = interpolate_energy(data_by_x[upper_x], energy_eV)
+                        t_x = (x - lower_x) / (upper_x - lower_x)
+                        n = n_lower + t_x * (n_upper - n_lower)
+                        k = k_lower + t_x * (k_upper - k_lower)
+
+                    n_array[i] = n
+                    k_array[i] = k
+
+            return n_array, k_array
         else:
             return (1.0, 0.0)  # Default for unknown materials
 
