@@ -280,11 +280,20 @@ class PlotReflectance:
                 # Build layer structure with numeric validation
                 Ls_structure = []
                 for layer in [[np.nan, "Constant", [1.0, 0.0]]] + metal_layers + (dbr_stack if dbr_stack else []) + substrate_layer:
-                    # Ensure all numeric values in layer structure are floats
+                    # Replace string materials like 'GaSb_ln' with numeric values
+                    if isinstance(layer[2], str):
+                        if layer[2] == "GaSb_ln":
+                            layer[2] = [3.816, 0.0]
+                        elif layer[2] == "GaAs_ln":
+                            layer[2] = [3.3, 0.0]  # update as appropriate
+                        else:
+                            layer[2] = [1.0, 0.0]  # default for unknown
+                        
+                    # Ensure all values in the layer are in proper format
                     new_layer = [
                         float(layer[0]) if not np.isnan(layer[0]) else np.nan,
                         layer[1],
-                        [float(x) for x in layer[2]] if isinstance(layer[2], (list, tuple)) else layer[2]
+                        [float(x) for x in layer[2]]
                     ]
                     Ls_structure.append(new_layer)
                 
@@ -305,12 +314,24 @@ class PlotReflectance:
                 # Convert results to float and handle potential string values
                 def to_float(x):
                     if isinstance(x, (str, bytes)):
-                        return float(x)
+                        try:
+                            return float(x)
+                        except ValueError:
+                            return 0.0  # Default value if conversion fails
                     return float(x)
                 
-                rs_float = to_float(rs[0]) if not isinstance(rs, (np.ndarray, list)) else to_float(rs[0][0])
-                rp_float = to_float(rp[0]) if not isinstance(rp, (np.ndarray, list)) else to_float(rp[0][0])
-                
+                def to_float(x):
+                    if isinstance(x, (str, bytes)):
+                        try:
+                            return float(x)
+                        except ValueError:
+                            return 0.0
+                    return float(x)
+
+                # rs and rp are 1-element arrays of complex numbers
+                rs_float = to_float(rs[0])
+                rp_float = to_float(rp[0])
+
                 if polarization == "s":
                     R0 = (np.abs(rs_float))**2
                 elif polarization == "p":
@@ -334,7 +355,7 @@ class PlotReflectance:
             
         except Exception as e:
             messagebox.showerror("Plot Error", f"Failed to plot angle dependence: {str(e)}")
-                
+        
     def apply_axis_ranges(self):
         """Apply custom axis ranges"""
         try:

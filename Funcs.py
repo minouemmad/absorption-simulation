@@ -95,16 +95,28 @@ def calc_Nlayer(layers,x,num_lay):
     return Nlay
  
 def calc_rsrpTsTp(incang,layers,x):
+    print(f"Debug - incang type: {type(incang)}, value: {incang}")  # Debug line
+    print(f"Debug - layers type: {type(layers)}, first layer: {layers[0]}")  # Debug line
+    print(f"Debug - x type: {type(x)}, value: {x}")  # Debug line
+    
     Ms=zeros([x.size,2,2],dtype=complex); Mp=zeros([x.size,2,2],dtype=complex)
     S=zeros([x.size,2,2],dtype=complex); P=zeros([x.size,2,2],dtype=complex)
     Ms[:,0,0]=1; Ms[:,1,1]=1; Mp[:,0,0]=1; Mp[:,1,1]=1
     rs=zeros((x.size),dtype=complex); rp=zeros((x.size),dtype=complex)
-    Ts=zeros((x.size),dtype=complex); Tp=zeros((x.size),dtype=complex);
+    Ts=zeros((x.size),dtype=complex); Tp=zeros((x.size),dtype=complex)
     im=0
+    
+    # Add debug before calc_Nlayer
+    print(f"Debug - calling calc_Nlayer with layer: {layers[im]}")  # Debug line
     N0=calc_Nlayer(layers,x,im)
+    print(f"Debug - N0 type: {type(N0)}, value: {N0}")  # Debug line
+    
     N0s=N0*cos(incang); N0p=N0/cos(incang)
     for im in range(1,len(layers)-1):
+        print(f"Debug - processing layer {im}: {layers[im]}")  # Debug line
         Nlay=calc_Nlayer(layers,x,im)
+        print(f"Debug - Nlay type: {type(Nlay)}, value: {Nlay}")  # Debug line
+        
         ARR=sqrt(Nlay**2-N0**2*(sin(incang)**2))
         Ns=abs(real(ARR)) - 1j*abs(imag(ARR))
         d=layers[im][0] 
@@ -128,6 +140,10 @@ def calc_rsrpTsTp(incang,layers,x):
         V_p = Mp[ix,:,:]@[[1.],[Nmp[ix]]]; Bp=V_p[0]; Cp=V_p[1]
         rp[ix]=(N0p[ix]*Bp-Cp)/(N0p[ix]*Bp+Cp)
         Tp[ix]=4*N0p[ix]*real(Nmp[ix])/(abs(N0p[ix]*Bp+Cp))**2
+    
+    print(f"Debug - rs type: {type(rs)}, value: {rs}")  # Debug line
+    print(f"Debug - rp type: {type(rp)}, value: {rp}")  # Debug line
+    
     return [rs,rp,Ts,Tp]
 
 def compute_electric_field_profile(angle_rad, layer_structure, wavelengths):

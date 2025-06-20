@@ -1926,11 +1926,7 @@ class LayerConfig:
                     for widget in child.winfo_children():
                         if isinstance(widget, ttk.Combobox):
                             metal = widget.get()
-                        elif isinstance(widget, tb.Entry):
-                            try:
-                                composition = float(widget.get())
-                            except ValueError:
-                                composition = 100  # Default to pure metal
+                    composition = 100  # Default to pure metal
                     
                     # Get metal optical constants
                     n, k = self._get_metal_refractive_index(metal)
