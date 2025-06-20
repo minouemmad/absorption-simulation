@@ -31,8 +31,9 @@ class LayerStackApp:
         
         # Connect angle dependence toggle to show/hide wavelength input
         self.plotter.show_angle_var.trace_add("write", lambda *args: 
-            self.layer_config.toggle_angle_dependence_inputs(self.plotter.show_angle_var.get()))
-        
+        self.layer_config.toggle_angle_dependence_inputs(self.plotter.show_angle_var.get()))
+        self.plotter.on_delete_last_angle_curve = self.plotter.clear_last_angle_curve
+
         # Link plotter to layer config for real-time updates
         self.layer_config.plotter = self.plotter
         

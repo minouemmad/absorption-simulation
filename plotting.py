@@ -11,7 +11,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tkinter import BOTH
 import ttkbootstrap as tb
 from tkinter import ttk
-
+import matplotlib.cm as cm
 
 class PlotReflectance:
     def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, 
@@ -31,6 +31,9 @@ class PlotReflectance:
         
         self.current_plot = None
 
+        self.angle_curves = []  # To store angle dependence curves
+        self.angle_colors = plt.cm.get_cmap('tab10', 10)  # Color cycle for curves
+        self.current_color_index = 0
         
         # Unknown metal parameters
         self.unknown_metal_params = {
@@ -199,6 +202,46 @@ class PlotReflectance:
         self.canvas3 = FigureCanvasTkAgg(self.fig3, master=self.angle_frame)
         self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=15)
         
+        # Angle plot axis controls
+        self.angle_axis_frame = ttk.Frame(self.angle_frame)
+        self.angle_axis_frame.pack(fill=tk.X, pady=5)
+
+        tb.Label(self.angle_axis_frame, text="X Range:").pack(side=tk.LEFT, padx=5)
+        self.angle_xmin_entry = tb.Entry(self.angle_axis_frame, width=5)
+        self.angle_xmin_entry.insert(0, "0")
+        self.angle_xmin_entry.pack(side=tk.LEFT)
+
+        tb.Label(self.angle_axis_frame, text="to").pack(side=tk.LEFT)
+        self.angle_xmax_entry = tb.Entry(self.angle_axis_frame, width=5)
+        self.angle_xmax_entry.insert(0, "90")
+        self.angle_xmax_entry.pack(side=tk.LEFT)
+
+        tb.Label(self.angle_axis_frame, text="Y Range:").pack(side=tk.LEFT, padx=5)
+        self.angle_ymin_entry = tb.Entry(self.angle_axis_frame, width=5)
+        self.angle_ymin_entry.insert(0, "0")
+        self.angle_ymin_entry.pack(side=tk.LEFT)
+
+        tb.Label(self.angle_axis_frame, text="to").pack(side=tk.LEFT)
+        self.angle_ymax_entry = tb.Entry(self.angle_axis_frame, width=5)
+        self.angle_ymax_entry.insert(0, "1")
+        self.angle_ymax_entry.pack(side=tk.LEFT)
+
+        angle_apply_btn = tb.Button(
+            self.angle_axis_frame,
+            text="Apply Axis",
+            command=self.apply_angle_axis_ranges,
+            bootstyle="info"
+        )
+        angle_apply_btn.pack(side=tk.LEFT, padx=5)
+
+        angle_reset_btn = tb.Button(
+            self.angle_axis_frame,
+            text="Reset Axis",
+            command=self.reset_angle_axis_ranges,
+            bootstyle="secondary"
+        )
+        angle_reset_btn.pack(side=tk.LEFT)
+        
         # Button frame for optional plot actions
         self.efield_btn_frame = ttk.Frame(self.efield_frame)
         self.angle_btn_frame = ttk.Frame(self.angle_frame)
@@ -220,9 +263,60 @@ class PlotReflectance:
         )
         self.plot_angle_btn.pack(side=tk.LEFT, padx=5)
         
+        # Add delete last curve button
+        self.delete_last_angle_btn = tb.Button(
+            self.angle_btn_frame,
+            text="Delete Last Curve",
+            command=self.clear_last_angle_curve,
+            bootstyle="danger"
+        )
+        self.delete_last_angle_btn.pack(side=tk.LEFT, padx=5)
+        
         self.fig1.tight_layout()
         self.fig2.tight_layout()
         self.fig3.tight_layout()
+        
+    def apply_angle_axis_ranges(self):
+        """Apply custom axis ranges to angle plot"""
+        try:
+            xmin = float(self.angle_xmin_entry.get())
+            xmax = float(self.angle_xmax_entry.get())
+            ymin = float(self.angle_ymin_entry.get())
+            ymax = float(self.angle_ymax_entry.get())
+            
+            if xmin >= xmax or ymin >= ymax:
+                raise ValueError("Invalid range values")
+                
+            self.ax3.set_xlim(xmin, xmax)
+            self.ax3.set_ylim(ymin, ymax)
+            
+            # Update ticks for better readability
+            x_ticks = np.linspace(xmin, xmax, num=min(7, int(xmax-xmin)+1))
+            y_ticks = np.linspace(ymin, ymax, num=11)
+            
+            self.ax3.set_xticks(x_ticks)
+            self.ax3.set_yticks(y_ticks)
+            
+            self.canvas3.draw()
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid axis range: {str(e)}")
+
+    def reset_angle_axis_ranges(self):
+        """Reset angle plot axis ranges to defaults"""
+        self.angle_xmin_entry.delete(0, tk.END)
+        self.angle_xmin_entry.insert(0, "0")
+        self.angle_xmax_entry.delete(0, tk.END)
+        self.angle_xmax_entry.insert(0, "90")
+        self.angle_ymin_entry.delete(0, tk.END)
+        self.angle_ymin_entry.insert(0, "0")
+        self.angle_ymax_entry.delete(0, tk.END)
+        self.angle_ymax_entry.insert(0, "1")
+        
+        self.ax3.set_xlim(0, 90)
+        self.ax3.set_ylim(0.0, 1.0)
+        self.ax3.set_xticks(np.arange(0, 91, 15))
+        self.ax3.set_yticks(np.linspace(0.0, 1.0, 11))
+        self.canvas3.draw()
 
     def toggle_electric_field(self):
         if self.show_efield_var.get():
@@ -252,50 +346,122 @@ class PlotReflectance:
                     line.set_visible(self.show_absorption_var.get())
             self.canvas.draw_idle()
 
+    def clear_last_angle_curve(self):
+        """Remove the last angle dependence curve from the plot"""
+        if self.angle_curves:
+            last_curve = self.angle_curves.pop()
+            last_curve.remove()
+            self.canvas3.draw()
+            
+    def get_layer_description(self):
+        """Generate a descriptive label for the current layer stack"""
+        layers = []
+        
+        # Check if we're in manual mode
+        if hasattr(self.layer_config, 'manual_mode_active') and self.layer_config.manual_mode_active:
+            # Process manual layers
+            for layer in self.layer_config.manual_layers:
+                try:
+                    thickness = float(layer['thickness_entry'].get())
+                    layer_type = layer['type_var'].get()
+                    
+                    # Get material name from the combobox if available
+                    material = "Unknown"
+                    for child in layer['material_inputs'].winfo_children():
+                        if hasattr(child, 'material_var'):
+                            material = child.material_var.get()
+                            break
+                    
+                    layers.append(f"{thickness:.0f}nm {material}")
+                except:
+                    continue
+            
+            # Add metal layer if enabled
+            if (hasattr(self.layer_config, 'include_metal_var') and self.layer_config.include_metal_var.get()):
+                try:
+                    thickness = float(self.layer_config.manual_metal_thickness.get())
+                except:
+                    pass
+        else:
+            # Process standard configuration layers
+            dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
+            
+            # Process metal layers
+            for layer in metal_layers:
+                thickness = layer[0]
+                if layer[1] == "Drude":
+                    layers.append(f"{thickness:.0f}nm Drude")
+                else:
+                    material = layer[2][0] if isinstance(layer[2], (list, tuple)) and len(layer[2]) > 0 else "Unknown"
+                    layers.append(f"{thickness:.0f}nm {material}")
+            
+            # Process DBR layers
+            for layer in dbr_stack:
+                thickness = layer[0]
+                material = layer[2][0] if isinstance(layer[2], (list, tuple)) and len(layer[2]) > 0 else "Unknown"
+                layers.append(f"{thickness:.0f}nm {material}")
+        
+        return "/".join(layers)
+    
     def plot_angle_dependence(self):
         """Plot reflectance vs angle of incidence at a fixed wavelength"""
         try:
-            # Get current configuration
-            dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
-            
-            # Validate and convert wavelength input
-            try:
-                wavelength = float(self.layer_config.wavelength_entry.get())
-                if wavelength <= 0:
-                    raise ValueError("Wavelength must be positive")
-            except ValueError as e:
-                messagebox.showerror("Input Error", f"Invalid wavelength: {str(e)}")
-                return
+            # Get wavelength from appropriate entry based on mode
+            if hasattr(self.layer_config, 'manual_mode_active') and self.layer_config.manual_mode_active:
+                wavelength_entry = self.layer_config.wavelength_entry
+            else:
+                wavelength_entry = self.layer_config.wavelength_entry
+                
+            wavelength = float(wavelength_entry.get())
+            if wavelength <= 0:
+                raise ValueError("Wavelength must be positive")
                 
             polarization = self.layer_config.polarization_var.get()
             
-            # Clear previous plot
-            self.ax3.clear()
+            # Get current layer configuration
+            dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
             
-            # Calculate reflectance at different angles
-            angles = np.linspace(0, 90, 91)  # 0 to 90 degrees in 1-degree steps
+            # Calculate reflectance at angles from 0 to 90 degrees in 1-degree steps
+            angles = np.linspace(0, 90, 91)
             reflectances = []
             
             for angle in angles:
-                # Build layer structure with numeric validation
+                # Build layer structure with proper material properties
                 Ls_structure = []
-                for layer in [[np.nan, "Constant", [1.0, 0.0]]] + metal_layers + (dbr_stack if dbr_stack else []) + substrate_layer:
-                    # Replace string materials like 'GaSb_ln' with numeric values
-                    if isinstance(layer[2], str):
-                        if layer[2] == "GaSb_ln":
-                            layer[2] = [3.816, 0.0]
-                        elif layer[2] == "GaAs_ln":
-                            layer[2] = [3.3, 0.0]  # update as appropriate
+                
+                # Add incident medium (air)
+                Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
+                
+                # Add metal layers
+                for layer in metal_layers:
+                    if layer[1] == "Drude":
+                        # Use the current Drude parameters
+                        f0 = self.layer_config.f0_var.get()
+                        wp = self.layer_config.wp_var.get()
+                        gamma0 = self.layer_config.gamma0_var.get()
+                        Ls_structure.append([
+                            layer[0],
+                            "Drude",
+                            [float(f0), float(wp), float(gamma0)]
+                        ])
+                    else:
+                        Ls_structure.append(layer.copy())
+                
+                # Add DBR layers
+                for layer in dbr_stack:
+                    Ls_structure.append(layer.copy())
+                
+                # Add substrate
+                if substrate_layer and len(substrate_layer) > 0:
+                    sub = substrate_layer[0].copy()
+                    if isinstance(sub[2], str):
+                        if sub[2] == "GaSb_ln":
+                            sub[2] = [3.816, 0.0]
+                        elif sub[2] == "GaAs_ln":
+                            sub[2] = [3.3, 0.0]
                         else:
-                            layer[2] = [1.0, 0.0]  # default for unknown
-                        
-                    # Ensure all values in the layer are in proper format
-                    new_layer = [
-                        float(layer[0]) if not np.isnan(layer[0]) else np.nan,
-                        layer[1],
-                        [float(x) for x in layer[2]]
-                    ]
-                    Ls_structure.append(new_layer)
+                            sub[2] = [1.0, 0.0]
+                    Ls_structure.append(sub)
                 
                 if not self.light_direction:
                     Ls_structure = Ls_structure[::-1]
@@ -304,50 +470,46 @@ class PlotReflectance:
                 incang = np.array([float(angle) * np.pi / 180], dtype=np.float64)
                 wavelength_nm = np.array([wavelength * 1000], dtype=np.float64)
                 
-                # Calculate reflectance at this angle
+                # Calculate reflectance at this angle with complex number handling
                 rs, rp, _, _ = MF.calc_rsrpTsTp(
                     incang,
                     Ls_structure,
                     wavelength_nm
                 )
                 
-                # Convert results to float and handle potential string values
-                def to_float(x):
-                    if isinstance(x, (str, bytes)):
-                        try:
-                            return float(x)
-                        except ValueError:
-                            return 0.0  # Default value if conversion fails
-                    return float(x)
-                
-                def to_float(x):
-                    if isinstance(x, (str, bytes)):
-                        try:
-                            return float(x)
-                        except ValueError:
-                            return 0.0
-                    return float(x)
-
-                # rs and rp are 1-element arrays of complex numbers
-                rs_float = to_float(rs[0])
-                rp_float = to_float(rp[0])
-
+                # Handle polarization with proper complex number handling
                 if polarization == "s":
-                    R0 = (np.abs(rs_float))**2
+                    R0 = float(np.abs(complex(rs[0])))**2
                 elif polarization == "p":
-                    R0 = (np.abs(rp_float))**2
+                    R0 = float(np.abs(complex(rp[0])))**2
                 else:  # "both"
-                    R0 = 0.5 * ((np.abs(rs_float))**2 + (np.abs(rp_float))**2)
+                    R0 = 0.5 * (float(np.abs(complex(rs[0]))**2 + float(np.abs(complex(rp[0]))**2)))
                 
-                reflectances.append(float(R0))
+                reflectances.append(R0)
             
-            # Plot results
-            self.ax3.plot(angles, reflectances, 'b-', label=f'Reflectance at {wavelength} μm')
+            # Get layer description for legend
+            layer_desc = self.get_layer_description()
+            
+            # Get next color in cycle
+            color = self.angle_colors(self.current_color_index % 10)
+            self.current_color_index += 1
+            
+            # Plot raw results
+            line, = self.ax3.plot(angles, reflectances, color=color, 
+                                label=f'{wavelength}μm: {layer_desc}')
+            
+            # Store the line reference
+            self.angle_curves.append(line)
+            
+            # Update legend and axes
+            self.ax3.legend()
             self.ax3.set_xlabel("Angle of Incidence (degrees)")
             self.ax3.set_ylabel("Reflectance")
             self.ax3.set_title(f"Angle-Dependent Reflectance at {wavelength} μm")
-            self.ax3.legend()
             self.ax3.grid(alpha=0.2)
+            
+            # Apply current axis ranges
+            self.apply_angle_axis_ranges()
             
             # Adjust layout to prevent label cutoff
             self.fig3.tight_layout()
@@ -377,7 +539,7 @@ class PlotReflectance:
             self.ax1.set_xticks(x_ticks)
             self.ax1.set_yticks(y_ticks)
             
-            self.canvas.draw_idle()
+            self.canvas1.draw_idle()
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid axis range: {str(e)}")
 
@@ -396,7 +558,7 @@ class PlotReflectance:
         self.ax1.set_ylim(0.0, 1.0)
         self.ax1.set_xticks(np.arange(2, 13, 1))
         self.ax1.set_yticks(np.linspace(0.0, 1.0, 11))
-        self.canvas.draw_idle()
+        self.canvas1.draw_idle()
 
     def update_unknown_metal_params(self, thickness, f0, gamma0, wp):
         """Update the unknown metal parameters and refresh plot"""
