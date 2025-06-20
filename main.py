@@ -22,15 +22,20 @@ class LayerStackApp:
         # Set up callbacks
         self.layer_config.on_upload_raw_data = self.upload_raw_data
         self.layer_config.on_plot_reflectance = self.plot_reflectance
-        self.layer_config.on_plot_electric_field = self.plot_electric_field
         self.layer_config.on_refresh_reflectance = self.refresh_reflectance
         self.layer_config.on_refresh_electric_field = self.refresh_electric_field
         
         # Initialize plotter
         self.plotter = PlotReflectance(right_frame=self.layer_config.right_frame)
+        self.plotter.layer_config = self.layer_config
+        
+        # Connect angle dependence toggle to show/hide wavelength input
+        self.plotter.show_angle_var.trace_add("write", lambda *args: 
+            self.layer_config.toggle_angle_dependence_inputs(self.plotter.show_angle_var.get()))
         
         # Link plotter to layer config for real-time updates
         self.layer_config.plotter = self.plotter
+        
         try:
             img = tk.PhotoImage(file='icon.png')  
             root.tk.call('wm', 'iconphoto', root._w, img)
@@ -88,8 +93,8 @@ class LayerStackApp:
             self.plotter.light_direction = light_direction
             
             # Plot reflectance and store state for future updates
-            self.plotter.plot_stack(angle, polarization, self.plotter.ax1, self.plotter.canvas)
-            self.plotter.store_plot_state(angle, polarization, self.plotter.ax1, self.plotter.canvas)
+            self.plotter.plot_stack(angle, polarization, self.plotter.ax1, self.plotter.canvas1)
+            self.plotter.store_plot_state(angle, polarization, self.plotter.ax1, self.plotter.canvas1)
             
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid input: {e}")
@@ -136,22 +141,23 @@ class LayerStackApp:
         self.plotter.ax1.set_title("Simulated Reflectance")
         self.plotter.ax1.grid(alpha=0.2)
         
-        self.plotter.canvas.draw()
+        self.plotter.canvas1.draw()
 
     def refresh_electric_field(self):
-        self.plotter.ax2.clear()
-        
-        # Reset electric field plot properties
-        self.plotter.ax2.set_xticks(np.linspace(0, 7, 8))
-        self.plotter.ax2.set_yscale("log")
-        self.plotter.ax2.set_yticks(np.logspace(-5, 1, 7))
-        self.plotter.ax2.set_xlim(0, 7)
-        self.plotter.ax2.set_xlabel("Depth from the top (μm)")
-        self.plotter.ax2.set_ylabel("Amplitude")
-        self.plotter.ax2.set_title("Electric Field Decay")
-        self.plotter.ax2.grid(alpha=0.2)
-        
-        self.plotter.canvas.draw()
+        if hasattr(self.plotter, 'ax2'):
+            self.plotter.ax2.clear()
+            
+            # Reset electric field plot properties
+            self.plotter.ax2.set_xticks(np.linspace(0, 7, 8))
+            self.plotter.ax2.set_yscale("log")
+            self.plotter.ax2.set_yticks(np.logspace(-5, 1, 7))
+            self.plotter.ax2.set_xlim(0, 7)
+            self.plotter.ax2.set_xlabel("Depth from the top (μm)")
+            self.plotter.ax2.set_ylabel("Amplitude")
+            self.plotter.ax2.set_title("Electric Field Decay")
+            self.plotter.ax2.grid(alpha=0.2)
+            
+            self.plotter.canvas2.draw()
 
         
 if __name__ == "__main__":

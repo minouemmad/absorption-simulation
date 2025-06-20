@@ -1724,20 +1724,24 @@ class LayerConfig:
         )
         incidence_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=10, columnspan=2)
         
-        # Incidence Angle
-        angle_frame = tb.Frame(incidence_frame)
-        angle_frame.pack(fill=X, pady=5)
-        
-        tb.Label(angle_frame, text="Incidence Angle (degrees):").pack(side=LEFT, padx=5)
-        self.angle_entry = tb.Entry(angle_frame, width=10)
-        self.angle_entry.pack(side=LEFT)
+        # Incidence Angle (for main reflectance plot)
+        tb.Label(incidence_frame, text="Incidence Angle (degrees):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.angle_entry = tb.Entry(incidence_frame, width=10)
+        self.angle_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
         self.angle_entry.insert(0, "0")
         
-        # Polarization - using a more modern radio button approach
-        polarization_frame = tb.Frame(incidence_frame)
-        polarization_frame.pack(fill=X, pady=5)
+        # Wavelength for angle dependence plot (initially hidden)
+        self.wavelength_frame = tb.Frame(incidence_frame)
+        self.wavelength_label = tb.Label(self.wavelength_frame, text="Wavelength (μm) for Angle Plot:")
+        self.wavelength_entry = tb.Entry(incidence_frame, width=10, validate="key")
+        self.wavelength_entry['validatecommand'] = (self.wavelength_entry.register(self.validate_numeric_input), '%P')
+        self.wavelength_entry.insert(0, "4.0")
         
-        tb.Label(polarization_frame, text="Polarization:").pack(side=LEFT, padx=5)
+        # Polarization
+        polarization_frame = tb.Frame(incidence_frame)
+        polarization_frame.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        tb.Label(polarization_frame, text="Polarization:").pack(side=tk.LEFT, padx=5)
         
         self.polarization_var = tk.StringVar(value="s")
         s_radio = tb.Radiobutton(
@@ -1747,7 +1751,7 @@ class LayerConfig:
             value="s",
             bootstyle="primary-toolbutton"
         )
-        s_radio.pack(side=LEFT, padx=5)
+        s_radio.pack(side=tk.LEFT, padx=5)
         
         p_radio = tb.Radiobutton(
             polarization_frame,
@@ -1756,7 +1760,25 @@ class LayerConfig:
             value="p",
             bootstyle="primary-toolbutton"
         )
-        p_radio.pack(side=LEFT, padx=5)
+        p_radio.pack(side=tk.LEFT, padx=5)
+
+    def validate_numeric_input(self, text):
+        if text == "":
+            return True
+        try:
+            float(text)
+            return True
+        except ValueError:
+            return False
+
+    def toggle_angle_dependence_inputs(self, show):
+        """Show/hide wavelength input based on angle dependence plot visibility"""
+        if show:
+            self.wavelength_label.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+            self.wavelength_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+            self.wavelength_frame.grid(row=1, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        else:
+            self.wavelength_frame.grid_forget()
 
     def get_layers(self): 
         self.update_manual_mode_state()

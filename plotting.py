@@ -10,6 +10,7 @@ import Funcs as MF
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tkinter import BOTH
 import ttkbootstrap as tb
+from tkinter import ttk
 
 
 class PlotReflectance:
@@ -48,48 +49,79 @@ class PlotReflectance:
 
     def setup_plots(self, right_frame):
         """Initialize the matplotlib figures and canvas"""
-        # Create a container frame for the plot and controls
-        plot_container = tk.Frame(right_frame)
-        plot_container.pack(fill=tk.BOTH, expand=True)
+        # Create a main container with scrollbar
+        self.main_canvas = tk.Canvas(right_frame)
+        self.scrollbar = ttk.Scrollbar(right_frame, orient="vertical", command=self.main_canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.main_canvas)
         
-        # Create control buttons frame
-        control_frame = tk.Frame(plot_container)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.main_canvas.configure(
+                scrollregion=self.main_canvas.bbox("all")
+            )
+        )
+        
+        self.main_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.main_canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.main_canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        
+        # Bind mousewheel for scrolling
+        self.main_canvas.bind_all("<MouseWheel>", 
+            lambda event: self.main_canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
+        
+        # Create control buttons frame at the top
+        control_frame = ttk.Frame(self.scrollable_frame)
         control_frame.pack(fill=tk.X, pady=5)
         
-        # Add toggle buttons for absorption and axis controls
-        self.show_absorption_var = tk.BooleanVar(value=True)
-        absorption_btn = tb.Checkbutton(
+        # Add toggle buttons for different plots
+        self.show_efield_var = tk.BooleanVar(value=False)
+        efield_btn = tb.Checkbutton(
             control_frame,
-            text="Show Absorption",
-            variable=self.show_absorption_var,
+            text="Show Electric Field",
+            variable=self.show_efield_var,
             bootstyle="primary-round-toggle",
-            command=self.toggle_absorption
+            command=self.toggle_electric_field
         )
-        absorption_btn.pack(side=tk.LEFT, padx=5)
+        efield_btn.pack(side=tk.LEFT, padx=5)
         
-        # Axis scaling controls
-        tb.Label(control_frame, text="X Range:").pack(side=tk.LEFT, padx=5)
-        self.xmin_entry = tb.Entry(control_frame, width=5)
+        self.show_angle_var = tk.BooleanVar(value=False)
+        angle_btn = tb.Checkbutton(
+            control_frame,
+            text="Show Angle Dependence",
+            variable=self.show_angle_var,
+            bootstyle="primary-round-toggle",
+            command=self.toggle_angle_dependence
+        )
+        angle_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Axis controls frame (only for main reflectance plot)
+        self.axis_frame = ttk.Frame(self.scrollable_frame)
+        self.axis_frame.pack(fill=tk.X, pady=5)
+        
+        tb.Label(self.axis_frame, text="X Range:").pack(side=tk.LEFT, padx=5)
+        self.xmin_entry = tb.Entry(self.axis_frame, width=5)
         self.xmin_entry.insert(0, "2.5")
         self.xmin_entry.pack(side=tk.LEFT)
         
-        tb.Label(control_frame, text="to").pack(side=tk.LEFT)
-        self.xmax_entry = tb.Entry(control_frame, width=5)
+        tb.Label(self.axis_frame, text="to").pack(side=tk.LEFT)
+        self.xmax_entry = tb.Entry(self.axis_frame, width=5)
         self.xmax_entry.insert(0, "12")
         self.xmax_entry.pack(side=tk.LEFT)
         
-        tb.Label(control_frame, text="Y Range:").pack(side=tk.LEFT, padx=5)
-        self.ymin_entry = tb.Entry(control_frame, width=5)
+        tb.Label(self.axis_frame, text="Y Range:").pack(side=tk.LEFT, padx=5)
+        self.ymin_entry = tb.Entry(self.axis_frame, width=5)
         self.ymin_entry.insert(0, "0")
         self.ymin_entry.pack(side=tk.LEFT)
         
-        tb.Label(control_frame, text="to").pack(side=tk.LEFT)
-        self.ymax_entry = tb.Entry(control_frame, width=5)
+        tb.Label(self.axis_frame, text="to").pack(side=tk.LEFT)
+        self.ymax_entry = tb.Entry(self.axis_frame, width=5)
         self.ymax_entry.insert(0, "1")
         self.ymax_entry.pack(side=tk.LEFT)
         
         apply_btn = tb.Button(
-            control_frame,
+            self.axis_frame,
             text="Apply Axis",
             command=self.apply_axis_ranges,
             bootstyle="info"
@@ -97,18 +129,27 @@ class PlotReflectance:
         apply_btn.pack(side=tk.LEFT, padx=5)
         
         reset_btn = tb.Button(
-            control_frame,
+            self.axis_frame,
             text="Reset Axis",
             command=self.reset_axis_ranges,
             bootstyle="secondary"
         )
         reset_btn.pack(side=tk.LEFT)
         
-        # Create the figure and axes
-        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={'height_ratios': [2, 1]})
-        self.fig.tight_layout(pad=3.0)
+        # Absorption toggle
+        self.show_absorption_var = tk.BooleanVar(value=True)
+        absorption_btn = tb.Checkbutton(
+            self.axis_frame,
+            text="Show Absorption",
+            variable=self.show_absorption_var,
+            bootstyle="primary-round-toggle",
+            command=self.toggle_absorption
+        )
+        absorption_btn.pack(side=tk.LEFT, padx=5)
         
-        # Reflectance Plot
+        # Create the main reflectance figure (always visible)
+        self.fig1 = plt.figure(figsize=(10, 5), dpi=100)
+        self.ax1 = self.fig1.add_subplot(111)
         self.ax1.set_xticks(np.arange(2, 13, 1))
         self.ax1.set_yticks(np.linspace(0.0, 1.0, 11))
         self.ax1.set_xlim(2.5, 12)
@@ -118,7 +159,18 @@ class PlotReflectance:
         self.ax1.set_title("Simulated Reflectance")
         self.ax1.grid(alpha=0.2)
         
-        # Electric Field Plot
+        self.canvas1 = FigureCanvasTkAgg(self.fig1, master=self.scrollable_frame)
+        self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=15)
+            
+        # Create container for optional plots
+        self.optional_plots_frame = ttk.Frame(self.scrollable_frame)
+        
+        # Electric field plot
+        self.efield_frame = ttk.Frame(self.optional_plots_frame)
+        self.fig2 = plt.figure(figsize=(10, 4), dpi=100)
+        self.ax2 = self.fig2.add_subplot(111)
+    
+        self.ax2 = self.fig2.add_subplot(111)
         self.ax2.set_xticks(np.linspace(0, 7, 8))
         self.ax2.set_yscale("log")
         self.ax2.set_yticks(np.logspace(-5, 1, 7))
@@ -128,8 +180,69 @@ class PlotReflectance:
         self.ax2.set_title("Electric Field Decay")
         self.ax2.grid(alpha=0.2)
         
-        self.canvas = FigureCanvasTkAgg(self.fig, master=plot_container)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.canvas2 = FigureCanvasTkAgg(self.fig2, master=self.efield_frame)
+        self.canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=15)
+        
+        # Angle dependence plot 
+        self.angle_frame = ttk.Frame(self.optional_plots_frame)
+        self.fig3 = plt.figure(figsize=(10, 4), dpi=100)
+        self.ax3 = self.fig3.add_subplot(111)
+        self.ax3.set_xticks(np.arange(0, 91, 15))
+        self.ax3.set_yticks(np.linspace(0.0, 1.0, 11))
+        self.ax3.set_xlim(0, 90)
+        self.ax3.set_ylim(0.0, 1.0)
+        self.ax3.set_xlabel("Angle of Incidence (degrees)")
+        self.ax3.set_ylabel("Reflectance")
+        self.ax3.set_title("Angle-Dependent Reflectance")
+        self.ax3.grid(alpha=0.2)
+        
+        self.canvas3 = FigureCanvasTkAgg(self.fig3, master=self.angle_frame)
+        self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=15)
+        
+        # Button frame for optional plot actions
+        self.efield_btn_frame = ttk.Frame(self.efield_frame)
+        self.angle_btn_frame = ttk.Frame(self.angle_frame)
+        
+        # Add buttons for the optional plots
+        self.plot_efield_btn = tb.Button(
+            self.efield_btn_frame,
+            text="Plot Electric Field",
+            command=lambda: self.plot_electric_field_decay(self.ax2, self.canvas2),
+            bootstyle="info"
+        )
+        self.plot_efield_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.plot_angle_btn = tb.Button(
+            self.angle_btn_frame,
+            text="Plot Angle Dependence",
+            command=self.plot_angle_dependence,
+            bootstyle="info"
+        )
+        self.plot_angle_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.fig1.tight_layout()
+        self.fig2.tight_layout()
+        self.fig3.tight_layout()
+
+    def toggle_electric_field(self):
+        if self.show_efield_var.get():
+            self.efield_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+            self.efield_btn_frame.pack(fill=tk.X, pady=5)
+            self.optional_plots_frame.pack(fill=tk.BOTH, expand=True)
+        else:
+            self.efield_frame.pack_forget()
+            if not self.show_angle_var.get():
+                self.optional_plots_frame.pack_forget()
+
+    def toggle_angle_dependence(self):
+        if self.show_angle_var.get():
+            self.angle_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+            self.angle_btn_frame.pack(fill=tk.X, pady=5)
+            self.optional_plots_frame.pack(fill=tk.BOTH, expand=True)
+        else:
+            self.angle_frame.pack_forget()
+            if not self.show_efield_var.get():
+                self.optional_plots_frame.pack_forget()
 
     def toggle_absorption(self):
         """Toggle absorption curve visibility"""
@@ -139,6 +252,89 @@ class PlotReflectance:
                     line.set_visible(self.show_absorption_var.get())
             self.canvas.draw_idle()
 
+    def plot_angle_dependence(self):
+        """Plot reflectance vs angle of incidence at a fixed wavelength"""
+        try:
+            # Get current configuration
+            dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
+            
+            # Validate and convert wavelength input
+            try:
+                wavelength = float(self.layer_config.wavelength_entry.get())
+                if wavelength <= 0:
+                    raise ValueError("Wavelength must be positive")
+            except ValueError as e:
+                messagebox.showerror("Input Error", f"Invalid wavelength: {str(e)}")
+                return
+                
+            polarization = self.layer_config.polarization_var.get()
+            
+            # Clear previous plot
+            self.ax3.clear()
+            
+            # Calculate reflectance at different angles
+            angles = np.linspace(0, 90, 91)  # 0 to 90 degrees in 1-degree steps
+            reflectances = []
+            
+            for angle in angles:
+                # Build layer structure with numeric validation
+                Ls_structure = []
+                for layer in [[np.nan, "Constant", [1.0, 0.0]]] + metal_layers + (dbr_stack if dbr_stack else []) + substrate_layer:
+                    # Ensure all numeric values in layer structure are floats
+                    new_layer = [
+                        float(layer[0]) if not np.isnan(layer[0]) else np.nan,
+                        layer[1],
+                        [float(x) for x in layer[2]] if isinstance(layer[2], (list, tuple)) else layer[2]
+                    ]
+                    Ls_structure.append(new_layer)
+                
+                if not self.light_direction:
+                    Ls_structure = Ls_structure[::-1]
+                
+                # Convert angle to radians
+                incang = np.array([float(angle) * np.pi / 180], dtype=np.float64)
+                wavelength_nm = np.array([wavelength * 1000], dtype=np.float64)
+                
+                # Calculate reflectance at this angle
+                rs, rp, _, _ = MF.calc_rsrpTsTp(
+                    incang,
+                    Ls_structure,
+                    wavelength_nm
+                )
+                
+                # Convert results to float and handle potential string values
+                def to_float(x):
+                    if isinstance(x, (str, bytes)):
+                        return float(x)
+                    return float(x)
+                
+                rs_float = to_float(rs[0]) if not isinstance(rs, (np.ndarray, list)) else to_float(rs[0][0])
+                rp_float = to_float(rp[0]) if not isinstance(rp, (np.ndarray, list)) else to_float(rp[0][0])
+                
+                if polarization == "s":
+                    R0 = (np.abs(rs_float))**2
+                elif polarization == "p":
+                    R0 = (np.abs(rp_float))**2
+                else:  # "both"
+                    R0 = 0.5 * ((np.abs(rs_float))**2 + (np.abs(rp_float))**2)
+                
+                reflectances.append(float(R0))
+            
+            # Plot results
+            self.ax3.plot(angles, reflectances, 'b-', label=f'Reflectance at {wavelength} μm')
+            self.ax3.set_xlabel("Angle of Incidence (degrees)")
+            self.ax3.set_ylabel("Reflectance")
+            self.ax3.set_title(f"Angle-Dependent Reflectance at {wavelength} μm")
+            self.ax3.legend()
+            self.ax3.grid(alpha=0.2)
+            
+            # Adjust layout to prevent label cutoff
+            self.fig3.tight_layout()
+            self.canvas3.draw()
+            
+        except Exception as e:
+            messagebox.showerror("Plot Error", f"Failed to plot angle dependence: {str(e)}")
+                
     def apply_axis_ranges(self):
         """Apply custom axis ranges"""
         try:
@@ -598,7 +794,9 @@ class PlotReflectance:
             # Mark layer boundaries
             for depth in depths[1:-1]:
                 ax.axvline(depth/1000, color='k', linestyle=':', alpha=0.3)
-                
+            
+            # Adjust layout to prevent label cutoff
+            self.fig2.tight_layout()
             canvas.draw()
             
         except Exception as e:
