@@ -462,7 +462,7 @@ class PlotReflectance:
                 if substrate_layer and len(substrate_layer) > 0:
                     Ls_structure.append(substrate_layer[0])
             
-            if not light_direction:
+            if light_direction:
                 Ls_structure = Ls_structure[::-1]
             
             # Calculate reflectance at angles from 0 to 89.9 degrees
