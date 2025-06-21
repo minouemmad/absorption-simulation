@@ -12,6 +12,7 @@ from tkinter import BOTH
 import ttkbootstrap as tb
 from tkinter import ttk
 import matplotlib.cm as cm
+from LD import LD
 
 class PlotReflectance:
     def __init__(self, dbr_stack=None, metal_layers=None, substrate_layer=None, 
@@ -408,84 +409,92 @@ class PlotReflectance:
         try:
             # Get wavelength from appropriate entry based on mode
             if hasattr(self.layer_config, 'manual_mode_active') and self.layer_config.manual_mode_active:
-                wavelength_entry = self.layer_config.wavelength_entry
+                wavelength_entry = self.layer_config.manual_wavelength_entry
+                light_direction = self.layer_config.manual_reverse_light_direction.get()
             else:
                 wavelength_entry = self.layer_config.wavelength_entry
+                light_direction = self.layer_config.reverse_light_direction.get()
                 
-            wavelength = float(wavelength_entry.get())
-            if wavelength <= 0:
+            wavelength_um = float(wavelength_entry.get())  # in microns
+            if wavelength_um <= 0:
                 raise ValueError("Wavelength must be positive")
                 
+            wavelength_nm = wavelength_um * 1000
             polarization = self.layer_config.polarization_var.get()
             
             # Get current layer configuration
-            dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
-            
-            # Calculate reflectance at angles from 0 to 90 degrees in 1-degree steps
-            angles = np.linspace(0, 90, 91)
-            reflectances = []
-            
-            for angle in angles:
-                # Build layer structure with proper material properties
+            if hasattr(self.layer_config, 'manual_mode_active') and self.layer_config.manual_mode_active:
+                # For manual mode, get all layers and combine them
+                metal_layers, manual_layers, substrate_layer = self.layer_config.get_layers()
                 Ls_structure = []
                 
                 # Add incident medium (air)
                 Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
                 
-                # Add metal layers
-                for layer in metal_layers:
-                    if layer[1] == "Drude":
-                        # Use the current Drude parameters
-                        f0 = self.layer_config.f0_var.get()
-                        wp = self.layer_config.wp_var.get()
-                        gamma0 = self.layer_config.gamma0_var.get()
-                        Ls_structure.append([
-                            layer[0],
-                            "Drude",
-                            [float(f0), float(wp), float(gamma0)]
-                        ])
-                    else:
-                        Ls_structure.append(layer.copy())
+                # Add metal layers if they exist
+                if metal_layers:
+                    Ls_structure.extend(metal_layers)
                 
-                # Add DBR layers
-                for layer in dbr_stack:
-                    Ls_structure.append(layer.copy())
+                # Add manual layers
+                if manual_layers:
+                    Ls_structure.extend(manual_layers)
                 
                 # Add substrate
                 if substrate_layer and len(substrate_layer) > 0:
-                    sub = substrate_layer[0].copy()
-                    if isinstance(sub[2], str):
-                        if sub[2] == "GaSb_ln":
-                            sub[2] = [3.816, 0.0]
-                        elif sub[2] == "GaAs_ln":
-                            sub[2] = [3.3, 0.0]
-                        else:
-                            sub[2] = [1.0, 0.0]
-                    Ls_structure.append(sub)
+                    Ls_structure.append(substrate_layer[0])
+            else:
+                # Standard configuration
+                dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
+                Ls_structure = []
                 
-                if not self.light_direction:
-                    Ls_structure = Ls_structure[::-1]
+                # Add incident medium (air)
+                Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
                 
-                # Convert angle to radians
-                incang = np.array([float(angle) * np.pi / 180], dtype=np.float64)
-                wavelength_nm = np.array([wavelength * 1000], dtype=np.float64)
+                # Add metal layers if they exist
+                if metal_layers:
+                    Ls_structure.extend(metal_layers)
                 
-                # Calculate reflectance at this angle with complex number handling
-                rs, rp, _, _ = MF.calc_rsrpTsTp(
-                    incang,
-                    Ls_structure,
-                    wavelength_nm
-                )
+                # Add DBR stack if it exists
+                if dbr_stack:
+                    Ls_structure.extend(dbr_stack)
                 
-                # Handle polarization with proper complex number handling
-                if polarization == "s":
-                    R0 = float(np.abs(complex(rs[0])))**2
-                elif polarization == "p":
-                    R0 = float(np.abs(complex(rp[0])))**2
-                else:  # "both"
-                    R0 = 0.5 * (float(np.abs(complex(rs[0]))**2 + float(np.abs(complex(rp[0]))**2)))
+                # Add substrate
+                if substrate_layer and len(substrate_layer) > 0:
+                    Ls_structure.append(substrate_layer[0])
+            
+            if not light_direction:
+                Ls_structure = Ls_structure[::-1]
+            
+            # Calculate reflectance at angles from 0 to 89.9 degrees
+            angles = np.linspace(0, 89.9, 180)
+            wavelength_array = np.array([wavelength_nm])
+            
+            # Initialize arrays for reflectance data
+            Rs = np.zeros_like(angles)
+            Rp = np.zeros_like(angles)
+            
+            for i, angle in enumerate(angles):
+                incang = np.array([angle * np.pi / 180])
                 
-                reflectances.append(R0)
+                # Get reflection coefficients
+                result = MF.calc_rsrpTsTp(incang, Ls_structure, wavelength_array)
+                
+                # Handle different return formats
+                if len(result) >= 2:
+                    rs, rp = result[0], result[1]
+                    Rs[i] = float(np.abs(rs[0]))**2
+                    Rp[i] = float(np.abs(rp[0]))**2
+                else:
+                    Rs[i] = 1.0  # Assume total reflection if calculation fails
+                    Rp[i] = 1.0
+            
+            # Calculate final reflectance based on polarization
+            if polarization == "s":
+                reflectances = Rs
+            elif polarization == "p":
+                reflectances = Rp
+            else:  # "both" or unpolarized
+                reflectances = 0.5 * (Rs + Rp)
             
             # Get layer description for legend
             layer_desc = self.get_layer_description()
@@ -494,9 +503,17 @@ class PlotReflectance:
             color = self.angle_colors(self.current_color_index % 10)
             self.current_color_index += 1
             
-            # Plot raw results
+            # Plot results
             line, = self.ax3.plot(angles, reflectances, color=color, 
-                                label=f'{wavelength}μm: {layer_desc}')
+                                label=f'{wavelength_um}μm: {layer_desc}')
+            
+            # For unpolarized case, optionally plot both polarizations
+            if polarization == "both":
+                line_s, = self.ax3.plot(angles, Rs, color=color, linestyle='--', alpha=0.5, 
+                                    label=f'{wavelength_um}μm (s-pol)')
+                line_p, = self.ax3.plot(angles, Rp, color=color, linestyle=':', alpha=0.5, 
+                                    label=f'{wavelength_um}μm (p-pol)')
+                self.angle_curves.extend([line_s, line_p])
             
             # Store the line reference
             self.angle_curves.append(line)
@@ -505,19 +522,16 @@ class PlotReflectance:
             self.ax3.legend()
             self.ax3.set_xlabel("Angle of Incidence (degrees)")
             self.ax3.set_ylabel("Reflectance")
-            self.ax3.set_title(f"Angle-Dependent Reflectance at {wavelength} μm")
+            self.ax3.set_title(f"Angle-Dependent Reflectance at {wavelength_um} μm")
             self.ax3.grid(alpha=0.2)
             
             # Apply current axis ranges
             self.apply_angle_axis_ranges()
-            
-            # Adjust layout to prevent label cutoff
-            self.fig3.tight_layout()
             self.canvas3.draw()
             
         except Exception as e:
             messagebox.showerror("Plot Error", f"Failed to plot angle dependence: {str(e)}")
-        
+                                                
     def apply_axis_ranges(self):
         """Apply custom axis ranges"""
         try:
@@ -765,14 +779,14 @@ class PlotReflectance:
         try:
             # Don't clear the entire axis - just remove the simulated plots
             for line in ax.get_lines():
-                if line.get_label() in ['Reflectance', 
-                                    'Absorption',
-                                    'Reflectance',
-                                    'Absorption']:
+                if line.get_label() in ['Reflectance', 'Absorption']:
                     line.remove()
             
-            # Validate and process layers
-            if not self.metal_layers and not self.dbr_stack:
+            # Get layers from layer_config instead of using direct attributes
+            dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
+            
+            # Validate we have layers to plot
+            if not any([metal_layers, dbr_stack]) and not hasattr(self.layer_config, 'manual_layers'):
                 raise ValueError("No layers configured for simulation")
                 
             # Process substrate

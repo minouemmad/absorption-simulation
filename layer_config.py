@@ -125,43 +125,36 @@ class LayerConfig:
         self.left_frame.grid_columnconfigure(0, weight=1)
 
     def setup_action_buttons(self):
-        # Button frame
+        # Button frame with better organization
         btn_frame = ttk.Frame(self.left_frame)
         btn_frame.pack(fill=X, pady=10)
         
-        # Upload Button
+        # Single column layout for better clarity
         upload_btn = tb.Button(
             btn_frame, 
             text="Upload Raw Reflectance Data", 
             command=self.upload_raw_data, 
-            bootstyle="primary"
+            bootstyle="primary",
+            width=25
         )
-        upload_btn.pack(side=TOP, fill=X, pady=5)
+        upload_btn.pack(side=TOP, pady=5)
         
-        # Plot Buttons
         plot_btn = tb.Button(
             btn_frame,
             text="Plot Simulated Reflectance",
             command=self.plot_reflectance,
-            bootstyle="primary"
+            bootstyle="primary",
+            width=25
         )
-        plot_btn.pack(side=TOP, fill=X, pady=5)
+        plot_btn.pack(side=TOP, pady=5)
         
-        plot_efield_btn = tb.Button(
-            btn_frame,
-            text="Plot Electric Field",
-            command=self.plot_electric_field,
-            bootstyle="primary"
-        )
-        plot_efield_btn.pack(side=TOP, fill=X, pady=5)
-        
-        # Delete buttons
+        # Delete buttons in a single row
         del_frame = ttk.Frame(btn_frame)
         del_frame.pack(fill=X, pady=5)
         
         self.refresh_reflectance_btn = tb.Button(
             del_frame,
-            text="Delete Reflectance",
+            text="Clear Reflectance Plot",
             command=self.refresh_reflectance,
             bootstyle="danger",
             width=15
@@ -170,13 +163,13 @@ class LayerConfig:
         
         self.refresh_efield_btn = tb.Button(
             del_frame,
-            text="Delete E-Field",
+            text="Clear E-Field Plot",
             command=self.refresh_electric_field,
             bootstyle="danger",
             width=15
         )
         self.refresh_efield_btn.pack(side=LEFT, expand=True, padx=2)
-
+    
     def upload_raw_data(self):
         if hasattr(self, 'on_upload_raw_data'):
             self.on_upload_raw_data()
@@ -220,6 +213,25 @@ class LayerConfig:
             bootstyle="info"
         )
         self.manual_layer_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+        
+        # Add light direction toggle below the substrate section
+        self.manual_light_direction_frame = tb.Frame(self.manual_layer_frame)
+        self.manual_light_direction_frame.pack(fill=X, pady=5)
+        
+        self.manual_reverse_light_direction = tk.BooleanVar(value=False)
+        manual_light_dir_btn = tb.Checkbutton(
+            self.manual_light_direction_frame,
+            text="Reverse Light Direction (Top→Bottom)",
+            variable=self.manual_reverse_light_direction,
+            bootstyle="primary-round-toggle"
+        )
+        manual_light_dir_btn.pack(side=LEFT, padx=5)
+        
+        # Add wavelength input for angle dependence plot
+        tb.Label(self.manual_light_direction_frame, text="Wavelength (μm):").pack(side=LEFT, padx=5)
+        self.manual_wavelength_entry = tb.Entry(self.manual_light_direction_frame, width=8)
+        self.manual_wavelength_entry.pack(side=LEFT)
+        self.manual_wavelength_entry.insert(0, "4.0")  # Default value 
         
         # Substrate section (always first layer)
         self.substrate_frame = tb.LabelFrame(
@@ -1788,19 +1800,20 @@ class LayerConfig:
             for layer in self.manual_layers:
                 try:
                     thickness = float(layer['thickness_entry'].get())
+                    # Get material properties from the layer's input frame
+                    material_properties = self._get_material_properties(layer)
+                    
+                    # Add each material component based on composition percentage
+                    for mat_type, n, k, percent in material_properties:
+                        if percent > 0:  # Only add if composition percentage > 0
+                            sublayer_thickness = thickness * (percent / 100)
+                            manual_layers.append([sublayer_thickness, "Constant", [n, k]])
                 except ValueError:
                     print(f"Warning: Invalid thickness entry. Skipping this layer.")
                     continue
-                # Get material properties from the layer's input frame
-                material_properties = self._get_material_properties(layer)
-                
-                # Add each material component based on composition percentage
-                for mat_type, n, k, percent in material_properties:
-                    if percent > 0:  # Only add if composition percentage > 0
-                        sublayer_thickness = thickness * (percent / 100)
-                        manual_layers.append([sublayer_thickness, "Constant", [n, k]])
 
             # Add metal layer from manual Drude parameters if specified and enabled
+            metal_layers = []
             if self.include_metal_var.get():
                 try:
                     metal_thickness = float(self.manual_metal_thickness.get())
@@ -1808,19 +1821,18 @@ class LayerConfig:
                     gamma0 = float(self.manual_gamma0_var.get())
                     wp = float(self.manual_wp_var.get())
                     
-                    metal_layer = [metal_thickness, "Drude", [f0, wp, gamma0]]
-                    manual_layers.insert(0, metal_layer)  # Add metal layer at the beginning
+                    metal_layers = [[metal_thickness, "Drude", [f0, wp, gamma0]]]
                 except ValueError:
                     print("Warning: Invalid metal layer parameters - skipping")
                     
             # Substrate handling for manual mode
             substrate_material = (
-                "GaSb_ln" if self.substrate_var.get() == "GaSb"
-                else "GaAs_ln" if self.substrate_var.get() == "GaAs"
+                [3.816, 0.0] if self.substrate_var.get() == "GaSb"
+                else [3.3, 0.0] if self.substrate_var.get() == "GaAs"
                 else [1.0, 0.0] if self.substrate_var.get() == "Air"
                 else float('nan')
             )            
-            # Get substrate thickness - this was the missing part
+            
             substrate_thickness = float('nan')  # Default to semi-infinite
             if self.manual_is_finite_substrate.get():
                 try:
@@ -1831,8 +1843,11 @@ class LayerConfig:
                     
             substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
 
-            return [], manual_layers, substrate_layer     
-
+            # Return all layers with metal layers first if light direction is reversed
+            if self.manual_reverse_light_direction.get():
+                return manual_layers, metal_layers, substrate_layer
+            else:
+                return metal_layers, manual_layers, substrate_layer
         else:
             # Predefined DBR layer setup
             substrate_material = (
