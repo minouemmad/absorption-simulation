@@ -60,17 +60,29 @@ def calc_Nlayer(layers, x, num_lay):
 
         elif case == 'Lorentz-Drude':
             v2p=[layers[num_lay][2][0]]
-            v2p, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega =  params
+            v2p, delta_n, delta_alpha, delta_omega_p, delta_f, delta_gamma, delta_omega = params
             
-            Metal = LD.LD(x * 1e-9, v2p, delta_omega_p, delta_f, delta_gamma, delta_omega, model='LD')
-            # v2p[0] refers to the material being used, e.g., 'Ag' or 'Al'
-        
+            # Clamp optional delta parameters
+            delta_n = delta_n if delta_n else 0.0
+            delta_alpha = delta_alpha if delta_alpha else 0.0
+            delta_omega_p = delta_omega_p if delta_omega_p else 0.0
+            delta_f = delta_f if delta_f else 0.0
+            delta_gamma = delta_gamma if delta_gamma else 0.0
+            delta_omega = delta_omega if delta_omega else 0.0
+
+            # Use DB model if material is in a specific format (e.g., 'Ag-DB')
+            if isinstance(v2p[0], str) and v2p[0].endswith('-DB'):
+                material = v2p[0][:-3]  # Remove '-DB' suffix
+                Metal = LD.LD(x * 1e-9, material, delta_omega_p, delta_f, delta_gamma, delta_omega, model='DB')
+            else:
+                Metal = LD.LD(x * 1e-9, v2p, delta_omega_p, delta_f, delta_gamma, delta_omega, model='LD')
+            
             # Adjust RI delta parameters
-            nnn = Metal.n + delta_n # real part of the complex refractive index for the material n represents the refractive index 
-            kap = Metal.k + delta_alpha # imaginary part of the complex refractive index for the material k represents the extinction coefficient (which is related to the absorption)
+            nnn = Metal.n + delta_n
+            kap = Metal.k + delta_alpha
             print(f"Updated n: {nnn}, Updated k: {kap}")
-            Nlay = nnn - 1j*kap # this creates the complex refractive index for the layer using n and k values, combining them into a single complex number (Nlay)
-            
+            Nlay = nnn - 1j*kap
+                
         elif case == 'Drude':
             v2p=[layers[num_lay][2][0],layers[num_lay][2][1],layers[num_lay][2][2]]   # f_o, w_o, G       
             ehbar = 1.519250349719305e+15 # e/hbar where hbar=h/(2*pi) and e=1.6e-19
@@ -81,7 +93,7 @@ def calc_Nlayer(layers, x, num_lay):
                 epsilon_D[i] = 1 - (v2p[0] * (v2p[1]*ehbar) ** 2 / (w ** 2 + 1j * (v2p[2]*ehbar) * w))
             epsilon = epsilon_D
             Nlay = sqrt(epsilon)
-            
+                
         elif case == 'File':
             aux=loadtxt(layers[num_lay][2][0]) # N,k data
             nnn=interp(x,aux[:,0],aux[:,1]) 
@@ -92,7 +104,7 @@ def calc_Nlayer(layers, x, num_lay):
             (x**2-2.0e4)+(1.0146*x**2)/(x**2-1.0e8)
             nnn=sqrt(n2)
             Nlay=nnn-1j*0.0
-        
+            
         # Validate result
         if np.any(np.isnan(Nlay)) or np.any(np.isinf(Nlay)):
             return np.ones_like(x, dtype=complex)  # Default to air if invalid
