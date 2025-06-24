@@ -34,7 +34,10 @@ class LayerConfig:
 
         self.manual_layer_var = tk.BooleanVar(value=False)
         self.manual_mode_active = False  # Additional flag to track manual mode
-        
+
+        self.polarization_var = tk.StringVar(value="both")  # For standard mode
+        self.manual_polarization_var = tk.StringVar(value="both")  # For manual mode
+
         # Modern styling with better colors
         self.style = tb.Style("minty")
         self.style.configure("TLabel", font=('Helvetica', 10))
@@ -119,7 +122,8 @@ class LayerConfig:
         # Main notebook for tabbed interface with better styling
         self.notebook = tb.Notebook(self.left_frame)
         self.notebook.pack(fill=BOTH, expand=True, padx=10, pady=10)
-        
+        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.update_manual_mode_state())
+
         # Configure grid weights
         self.left_frame.grid_rowconfigure(0, weight=1)
         self.left_frame.grid_columnconfigure(0, weight=1)
@@ -231,7 +235,42 @@ class LayerConfig:
         tb.Label(self.manual_light_direction_frame, text="Wavelength (μm):").pack(side=LEFT, padx=5)
         self.manual_wavelength_entry = tb.Entry(self.manual_light_direction_frame, width=8)
         self.manual_wavelength_entry.pack(side=LEFT)
-        self.manual_wavelength_entry.insert(0, "4.0")  # Default value 
+        self.manual_wavelength_entry.insert(0, "4.0")  # Default value
+                
+        # Add polarization selection for manual mode
+        polarization_frame = tb.Frame(self.manual_light_direction_frame)
+        polarization_frame.pack(side=tk.LEFT, padx=5)
+
+        tb.Label(polarization_frame, text="Polarization:").pack(side=tk.LEFT)
+        s_radio = tb.Radiobutton(
+            polarization_frame,
+            text="s",
+            variable=self.manual_polarization_var,
+            value="s",
+            bootstyle="primary-toolbutton",
+            command=self.update_polarization_state
+        )
+        s_radio.pack(side=tk.LEFT)
+
+        p_radio = tb.Radiobutton(
+            polarization_frame,
+            text="p",
+            variable=self.manual_polarization_var,
+            value="p",
+            bootstyle="primary-toolbutton",
+            command=self.update_polarization_state
+        )
+        p_radio.pack(side=tk.LEFT)
+
+        both_radio = tb.Radiobutton(
+            polarization_frame,
+            text="both",
+            variable=self.manual_polarization_var,
+            value="both",
+            bootstyle="primary-toolbutton",
+            command=self.update_polarization_state
+        )
+        both_radio.pack(side=tk.LEFT)
         
         # Substrate section (always first layer)
         self.substrate_frame = tb.LabelFrame(
@@ -327,6 +366,11 @@ class LayerConfig:
         
         # Add Drude fitting controls for manual layers
         self.setup_manual_drude_fitting()
+
+    def update_polarization_state(self):
+        """Update polarization state when changed in manual mode"""
+        if hasattr(self, 'plotter') and self.plotter.current_plot:
+            self.plotter.plot_angle_dependence()
 
     def apply_layer_repeat(self):
         """Repeat the selected layers the specified number of times"""
@@ -514,7 +558,6 @@ class LayerConfig:
         
         # Update the state based on both the checkbox and the active tab
         self.manual_mode_active = self.manual_layer_var.get() and is_manual_tab
-
 
     def get_cached_reflectance(self, f0, gamma0, wp, wavelength):
         """Get reflectance from cache or compute if not available"""

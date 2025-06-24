@@ -403,66 +403,81 @@ class PlotReflectance:
                 layers.append(f"{thickness:.0f}nm {material}")
         
         return "/".join(layers)
-    
+        
     def plot_angle_dependence(self):
         """Plot reflectance vs angle of incidence at a fixed wavelength"""
         try:
-            # Get wavelength from appropriate entry based on mode
-            if hasattr(self.layer_config, 'manual_mode_active') and self.layer_config.manual_mode_active:
+            # Get wavelength and polarization parameters
+            if self.layer_config.manual_mode_active:
                 wavelength_entry = self.layer_config.manual_wavelength_entry
                 light_direction = self.layer_config.manual_reverse_light_direction.get()
+                polarization = self.layer_config.manual_polarization_var.get()
             else:
                 wavelength_entry = self.layer_config.wavelength_entry
                 light_direction = self.layer_config.reverse_light_direction.get()
+                polarization = self.layer_config.polarization_var.get()
                 
-            wavelength_um = float(wavelength_entry.get())  # in microns
+            wavelength_um = float(wavelength_entry.get())
             if wavelength_um <= 0:
                 raise ValueError("Wavelength must be positive")
                 
             wavelength_nm = wavelength_um * 1000
-            polarization = self.layer_config.polarization_var.get()
             
-            # Get current layer configuration
-            if hasattr(self.layer_config, 'manual_mode_active') and self.layer_config.manual_mode_active:
-                # For manual mode, get all layers and combine them
-                metal_layers, manual_layers, substrate_layer = self.layer_config.get_layers()
-                Ls_structure = []
+            # Get layer configuration - unified approach for both modes
+            if self.layer_config.manual_mode_active:
+                # For manual mode, only use manual layers and ignore standard config layers
+                metal_layers, manual_layers, _ = self.layer_config.get_layers()  # Ignore substrate from standard config
+                all_layers = metal_layers + manual_layers
                 
-                # Add incident medium (air)
-                Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
+                # Get substrate from manual config
+                substrate_material = (
+                    [3.816, 0.0] if self.layer_config.substrate_var.get() == "GaSb"
+                    else [3.3, 0.0] if self.layer_config.substrate_var.get() == "GaAs"
+                    else [1.0, 0.0]  # Default to air
+                )
                 
-                # Add metal layers if they exist
-                if metal_layers:
-                    Ls_structure.extend(metal_layers)
+                # Get substrate thickness from manual config
+                substrate_thickness = float('nan')
+                if self.layer_config.manual_is_finite_substrate.get():
+                    try:
+                        substrate_thickness = float(self.layer_config.manual_substrate_thickness.get())
+                    except ValueError:
+                        substrate_thickness = float('nan')
                 
-                # Add manual layers
-                if manual_layers:
-                    Ls_structure.extend(manual_layers)
-                
-                # Add substrate
-                if substrate_layer and len(substrate_layer) > 0:
-                    Ls_structure.append(substrate_layer[0])
+                substrate_layer = [[substrate_thickness, "Constant", substrate_material]]
             else:
                 # Standard configuration
                 dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
-                Ls_structure = []
-                
-                # Add incident medium (air)
-                Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
-                
-                # Add metal layers if they exist
-                if metal_layers:
-                    Ls_structure.extend(metal_layers)
-                
-                # Add DBR stack if it exists
-                if dbr_stack:
-                    Ls_structure.extend(dbr_stack)
-                
-                # Add substrate
-                if substrate_layer and len(substrate_layer) > 0:
-                    Ls_structure.append(substrate_layer[0])
+                all_layers = metal_layers + (dbr_stack if dbr_stack else [])
             
+            # Build layer structure properly
+            Ls_structure = []
+            
+            # Add incident medium (air) only if not reversed
+            if not light_direction:
+                Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
+            
+            # Add all layers
+            Ls_structure.extend(all_layers)
+            
+            # Add substrate if it exists - FIXED TO USE ACTUAL SUBSTRATE PROPERTIES
+            if substrate_layer and len(substrate_layer) > 0:
+                sub_layer = substrate_layer[0]
+                # Convert substrate material names to optical constants
+                if isinstance(sub_layer[2], str):
+                    if sub_layer[2] == "GaSb_ln":
+                        sub_layer[2] = [3.816, 0.0]
+                    elif sub_layer[2] == "GaAs_ln":
+                        sub_layer[2] = [3.3, 0.0]  # Updated GaAs refractive index
+                    elif sub_layer[2] == "Air":
+                        sub_layer[2] = [1.0, 0.0]
+                    else:
+                        sub_layer[2] = [1.0, 0.0]  # Default
+                Ls_structure.append(sub_layer)
+            
+            # If light direction is reversed, add air on the other side and reverse stack
             if light_direction:
+                Ls_structure.append([np.nan, "Constant", [1.0, 0.0]])
                 Ls_structure = Ls_structure[::-1]
             
             # Calculate reflectance at angles from 0 to 89.9 degrees
@@ -474,19 +489,42 @@ class PlotReflectance:
             Rp = np.zeros_like(angles)
             
             for i, angle in enumerate(angles):
-                incang = np.array([angle * np.pi / 180])
-                
-                # Get reflection coefficients
-                result = MF.calc_rsrpTsTp(incang, Ls_structure, wavelength_array)
-                
-                # Handle different return formats
-                if len(result) >= 2:
-                    rs, rp = result[0], result[1]
-                    Rs[i] = float(np.abs(rs[0]))**2
-                    Rp[i] = float(np.abs(rp[0]))**2
+                # Special handling for normal incidence
+                if angle == 0:
+                    incang = np.array([0.0])  # Exactly 0 degrees
                 else:
-                    Rs[i] = 1.0  # Assume total reflection if calculation fails
-                    Rp[i] = 1.0
+                    incang = np.array([angle * np.pi / 180])
+                
+                try:
+                    # Get reflection coefficients
+                    result = MF.calc_rsrpTsTp(incang, Ls_structure, wavelength_array)
+                    
+                    if len(result) >= 2:
+                        rs, rp = result[0], result[1]
+                        Rs[i] = float(np.abs(rs[0]))**2
+                        Rp[i] = float(np.abs(rp[0]))**2
+                        
+                        # For normal incidence, s and p should be identical
+                        if angle == 0:
+                            avg = (Rs[i] + Rp[i])/2
+                            Rs[i] = avg
+                            Rp[i] = avg
+                    else:
+                        raise ValueError("Invalid result from calc_rsrpTsTp")
+                        
+                except Exception as e:
+                    print(f"Error at angle {angle}°: {str(e)}")
+                    Rs[i] = np.nan
+                    Rp[i] = np.nan
+            
+            # Handle NaN values by linear interpolation
+            if np.any(np.isnan(Rs)) or np.any(np.isnan(Rp)):
+                valid_mask = ~np.isnan(Rs) & ~np.isnan(Rp)
+                if np.any(valid_mask):
+                    Rs = np.interp(angles, angles[valid_mask], Rs[valid_mask])
+                    Rp = np.interp(angles, angles[valid_mask], Rp[valid_mask])
+                else:
+                    raise ValueError("All angle calculations failed")
             
             # Calculate final reflectance based on polarization
             if polarization == "s":
@@ -499,38 +537,74 @@ class PlotReflectance:
             # Get layer description for legend
             layer_desc = self.get_layer_description()
             
+            # Create legend labels based on polarization
+            if polarization == "s":
+                main_label = f'{wavelength_um}μm (s-pol): {layer_desc}'
+                line_style = '-'  # Solid line for s-polarization
+            elif polarization == "p":
+                main_label = f'{wavelength_um}μm (p-pol): {layer_desc}'
+                line_style = '--'  # Dashed line for p-polarization
+            else:  # "both"
+                main_label = f'{wavelength_um}μm (unpol): {layer_desc}'
+                line_style = '-'  # Solid line for unpolarized
+                
             # Get next color in cycle
             color = self.angle_colors(self.current_color_index % 10)
             self.current_color_index += 1
             
-            # Plot results
-            line, = self.ax3.plot(angles, reflectances, color=color, 
-                                label=f'{wavelength_um}μm: {layer_desc}')
+            # Plot main curve with appropriate style and label
+            line, = self.ax3.plot(angles, reflectances, 
+                                color=color, 
+                                linestyle=line_style,
+                                label=main_label)
             
             # For unpolarized case, optionally plot both polarizations
             if polarization == "both":
-                line_s, = self.ax3.plot(angles, Rs, color=color, linestyle='--', alpha=0.5, 
+                line_s, = self.ax3.plot(angles, Rs, 
+                                    color=color, 
+                                    linestyle='-',  # Solid for s-pol
+                                    alpha=0.7, 
                                     label=f'{wavelength_um}μm (s-pol)')
-                line_p, = self.ax3.plot(angles, Rp, color=color, linestyle=':', alpha=0.5, 
+                line_p, = self.ax3.plot(angles, Rp, 
+                                    color=color, 
+                                    linestyle='--',  # Dashed for p-pol
+                                    alpha=0.7, 
                                     label=f'{wavelength_um}μm (p-pol)')
                 self.angle_curves.extend([line_s, line_p])
             
             # Store the line reference
             self.angle_curves.append(line)
-            
-            # Update legend and axes
-            self.ax3.legend()
+            self.ax3.legend(fontsize=8)  # Smaller font for better fit
+            self.canvas3.draw()
+        
+            # Update plot
+            self.clear_angle_legend()
             self.ax3.set_xlabel("Angle of Incidence (degrees)")
             self.ax3.set_ylabel("Reflectance")
             self.ax3.set_title(f"Angle-Dependent Reflectance at {wavelength_um} μm")
             self.ax3.grid(alpha=0.2)
             
-            # Apply current axis ranges
             self.apply_angle_axis_ranges()
             self.canvas3.draw()
             
         except Exception as e:
             messagebox.showerror("Plot Error", f"Failed to plot angle dependence: {str(e)}")
+     
+     # Add this method to the PlotReflectance class
+    def clear_angle_legend(self):
+        """Clear the angle plot legend to prevent overcrowding"""
+        if hasattr(self, 'ax3'):
+            # Get current legend items
+            handles, labels = self.ax3.get_legend_handles_labels()
+            
+            # Keep only the last 5 items (adjust number as needed)
+            if len(handles) > 5:
+                handles = handles[-5:]
+                labels = labels[-5:]
+                
+            # Update legend
+            self.ax3.legend(handles, labels, fontsize=8)
+            self.canvas3.draw()
                                                 
     def apply_axis_ranges(self):
         """Apply custom axis ranges"""
@@ -781,7 +855,7 @@ class PlotReflectance:
             for line in ax.get_lines():
                 if line.get_label() in ['Reflectance', 'Absorption']:
                     line.remove()
-            
+
             # Get layers from layer_config instead of using direct attributes
             dbr_stack, metal_layers, substrate_layer = self.layer_config.get_layers()
             
